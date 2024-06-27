@@ -242,184 +242,214 @@ def run(user_info):
             del st.session_state.user_info 
             st.experimental_rerun()
             
-    BaseLiq,BaseAliq=import_base(mesNum)
-    BaseLiq=BaseLiq.drop_duplicates()
-    try:
-        BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
-    except:
-        pass
+        BaseLiq,BaseAliq=import_base(mesNum)
+        BaseLiq=BaseLiq.drop_duplicates()
+        try:
+            BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
+        except:
+            pass
 
-    aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
+        aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
 
-    aliqcolabs=aliqcolabs.groupby('Criado Por',as_index=False)['Valor Original'].sum()
+        aliqcolabs=aliqcolabs.groupby('Criado Por',as_index=False)['Valor Original'].sum()
 
-    aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
+        aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
 
-    BaseLiqmes=BaseLiq.loc[(BaseLiq['Data Liquidacao'].dt.month==mesNum) & (BaseLiq['Data Liquidacao'].dt.year==anoLiq)]
+        BaseLiqmes=BaseLiq.loc[(BaseLiq['Data Liquidacao'].dt.month==mesNum) & (BaseLiq['Data Liquidacao'].dt.year==anoLiq)]
 
-    BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
+        BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
 
-    BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
+        BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
 
-    BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
+        BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
 
-    acordoOnline=BaseLiqmes[BaseLiqmes['Criado Por']=='Acordo Online']
+        acordoOnline=BaseLiqmes[BaseLiqmes['Criado Por']=='Acordo Online']
 
-    BaseLiqSemAO=BaseLiqmes[BaseLiqmes['Criado Por']!='Acordo Online']
+        BaseLiqSemAO=BaseLiqmes[BaseLiqmes['Criado Por']!='Acordo Online']
 
-    LiquidadoEquipe=BaseLiqSemAO[BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
+        LiquidadoEquipe=BaseLiqSemAO[BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
 
-    LiquidadoEquipeMerge=BaseLiqSemAO.merge(EquipeGeral,left_on='Criado Por',right_on='Nome_Colaborador')
+        LiquidadoEquipeMerge=BaseLiqSemAO.merge(EquipeGeral,left_on='Criado Por',right_on='Nome_Colaborador')
 
-    LiquidadoEquipeMerge['valorPcolab']=LiquidadoEquipeMerge.groupby('Nome_Colaborador')['Valor Liquidado'].transform(sum)
+        LiquidadoEquipeMerge['valorPcolab']=LiquidadoEquipeMerge.groupby('Nome_Colaborador')['Valor Liquidado'].transform(sum)
 
-    LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valorPcolab',ascending=False)
+        LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valorPcolab',ascending=False)
 
-    LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valorPcolab'].rank(method='dense', ascending=False).astype(int)
+        LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valorPcolab'].rank(method='dense', ascending=False).astype(int)
 
-    cobranca_geral=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='COBRANÇA_GERAL']
+        cobranca_geral=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='COBRANÇA_GERAL']
 
-    telecobranca=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='Telecobrança']
+        telecobranca=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='Telecobrança']
 
-    Apoio=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='MARCOS']
+        Apoio=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='MARCOS']
 
-    ColabsExternos=BaseLiqSemAO[~BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
+        ColabsExternos=BaseLiqSemAO[~BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
 
-    # cobranca_geral.columns
-    # cobranca_geral.groupby(['REPORTE','Nome_Colaborador'],as_index=False)['Valor Liquidado'].sum()
+        # cobranca_geral.columns
+        # cobranca_geral.groupby(['REPORTE','Nome_Colaborador'],as_index=False)['Valor Liquidado'].sum()
 
-    metas=buscaDadosSQL('metas_cobranca_geral',equipe=None)
-    metas['Mes']=metas['Mês'].dt.month
-    metas['Ano']=metas['Mês'].dt.year
-    metasFiltro=metas.loc[(metas['Mes']==mesNum) & (metas['Ano']==anoLiq)]
-    MetaLiq=list(metasFiltro['Meta_geral'])[0]
-    MetaTele=list(metasFiltro['Meta_Tele'])[0]
-    Metaindividual=list(metasFiltro['Meta_Individual'])[0]
-    print(Metaindividual)
-    MetaindividualTele=list(metasFiltro['Meta_Individual_Tele'])[0]
-    print(MetaindividualTele)
-    dias_uteis=dias_uteis_no_mes(anoLiq, mesNum)
-    dias_uteis_falta=dias_uteis_que_faltam(mesNum)
+        metas=buscaDadosSQL('metas_cobranca_geral',equipe=None)
+        metas['Mes']=metas['Mês'].dt.month
+        metas['Ano']=metas['Mês'].dt.year
+        metasFiltro=metas.loc[(metas['Mes']==mesNum) & (metas['Ano']==anoLiq)]
+        MetaLiq=list(metasFiltro['Meta_geral'])[0]
+        MetaTele=list(metasFiltro['Meta_Tele'])[0]
+        Metaindividual=list(metasFiltro['Meta_Individual'])[0]
+        print(Metaindividual)
+        MetaindividualTele=list(metasFiltro['Meta_Individual_Tele'])[0]
+        print(MetaindividualTele)
+        dias_uteis=dias_uteis_no_mes(anoLiq, mesNum)
+        dias_uteis_falta=dias_uteis_que_faltam(mesNum)
 
-    # token=os.getenv('token')
-    token=os.getenv('token')
-    r = requests.get(f'https://api.invertexto.com/v1/holidays/{anoLiq}?token={token}&state=PR',verify=False)
-    feriados=r.json()
+        # token=os.getenv('token')
+        token=os.getenv('token')
+        r = requests.get(f'https://api.invertexto.com/v1/holidays/{anoLiq}?token={token}&state=PR',verify=False)
+        feriados=r.json()
 
-    feriadoNacionais=[data['date'] for data in feriados]
+        feriadoNacionais=[data['date'] for data in feriados]
 
-    feriadosDF=pd.DataFrame(feriadoNacionais,columns=["Data"])
-    feriadosDF["Data"]=pd.to_datetime(feriadosDF["Data"])
-    feriadosDF["DiaSemana"]=feriadosDF["Data"].dt.strftime("%A")
-    feriadosDF["Mês"]=feriadosDF["Data"].dt.month
-    domingo="Sunday"
-    sabado="Saturday"
-    feriadosDUtil=feriadosDF.loc[(feriadosDF['DiaSemana']!=domingo) & (feriadosDF['DiaSemana']!=sabado)]
+        feriadosDF=pd.DataFrame(feriadoNacionais,columns=["Data"])
+        feriadosDF["Data"]=pd.to_datetime(feriadosDF["Data"])
+        feriadosDF["DiaSemana"]=feriadosDF["Data"].dt.strftime("%A")
+        feriadosDF["Mês"]=feriadosDF["Data"].dt.month
+        domingo="Sunday"
+        sabado="Saturday"
+        feriadosDUtil=feriadosDF.loc[(feriadosDF['DiaSemana']!=domingo) & (feriadosDF['DiaSemana']!=sabado)]
 
-    qtdeFeriados=feriadosDUtil.groupby('Mês',as_index=False)['Data'].count()
-    qtdeFeriadosMes=qtdeFeriados[qtdeFeriados['Mês']==mesNum]
+        qtdeFeriados=feriadosDUtil.groupby('Mês',as_index=False)['Data'].count()
+        qtdeFeriadosMes=qtdeFeriados[qtdeFeriados['Mês']==mesNum]
 
-    try:
-        nFer=list(qtdeFeriadosMes['Data'])[0]
-        dias_uteis=dias_uteis-nFer
-        dias_uteis_falta=dias_uteis_falta-nFer
-    except:
-        nFer=0
-        dias_uteis=dias_uteis-nFer
-        dias_uteis_falta=dias_uteis_falta-nFer
+        try:
+            nFer=list(qtdeFeriadosMes['Data'])[0]
+            dias_uteis=dias_uteis-nFer
+            dias_uteis_falta=dias_uteis_falta-nFer
+        except:
+            nFer=0
+            dias_uteis=dias_uteis-nFer
+            dias_uteis_falta=dias_uteis_falta-nFer
 
-    diaHj=dt.datetime.now().day
-    cobgeral=cobranca_geral['Valor Liquidado'].sum()
-    tele=telecobranca['Valor Liquidado'].sum()
-    acOn=acordoOnline['Valor Liquidado'].sum()
-    totalLiq=BaseLiqmes['Valor Liquidado'].sum()
-    liqDia=BaseLiqmes.loc[(BaseLiqmes['Data Liquidacao'].dt.day==diaHj),'Valor Liquidado'].sum()
-    aLiquidar=BaseAliqMetas['A Receber'].sum()
-    faltaMeta=totalLiq-MetaLiq
-    faltaMetaTele=tele-MetaTele
-    dados_dias_anteriores = BaseLiqmes[BaseLiqmes['Data Liquidacao'].dt.day < diaHj]
+        diaHj=dt.datetime.now().day
+        cobgeral=cobranca_geral['Valor Liquidado'].sum()
+        tele=telecobranca['Valor Liquidado'].sum()
+        acOn=acordoOnline['Valor Liquidado'].sum()
+        totalLiq=BaseLiqmes['Valor Liquidado'].sum()
+        liqDia=BaseLiqmes.loc[(BaseLiqmes['Data Liquidacao'].dt.day==diaHj),'Valor Liquidado'].sum()
+        aLiquidar=BaseAliqMetas['A Receber'].sum()
+        faltaMeta=totalLiq-MetaLiq
+        faltaMetaTele=tele-MetaTele
+        dados_dias_anteriores = BaseLiqmes[BaseLiqmes['Data Liquidacao'].dt.day < diaHj]
 
-    media_por_colaborador_dia = dados_dias_anteriores.groupby('Criado Por',as_index=False)['Valor Liquidado'].mean()
+        media_por_colaborador_dia = dados_dias_anteriores.groupby('Criado Por',as_index=False)['Valor Liquidado'].mean()
 
-    LiqPordia=BaseLiqmes.groupby('Data Liquidacao',as_index=False)['Valor Liquidado'].sum()
-    dias = LiqPordia['Data Liquidacao']
-    valores = LiqPordia['Valor Liquidado']
-    percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
-    percentual_atingido=(totalLiq/MetaLiq) * 100
-    # Dados de exemplo: datas e valores de liquidação diária
+        LiqPordia=BaseLiqmes.groupby('Data Liquidacao',as_index=False)['Valor Liquidado'].sum()
+        dias = LiqPordia['Data Liquidacao']
+        valores = LiqPordia['Valor Liquidado']
+        percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
+        percentual_atingido=(totalLiq/MetaLiq) * 100
+        # Dados de exemplo: datas e valores de liquidação diária
 
-    # Calcula a liquidação acumulada
-    LiqPordia['Liquidação Acumulada'] = LiqPordia['Valor Liquidado'].cumsum()
+        # Calcula a liquidação acumulada
+        LiqPordia['Liquidação Acumulada'] = LiqPordia['Valor Liquidado'].cumsum()
 
-def criaImagem():
-    # Carrega a imagem
-    image = Image.open("imagem_meta.jpg").convert("RGBA")  # Converte para RGBA
+    def criaImagem(valor,imagem):
 
-    # Cria uma nova imagem com fundo transparente
-    background = Image.new("RGBA", image.size, (255, 255, 255, 0))  # Branco transparente
-    background.paste(image, (0, 0), image)  # Cola a imagem original sobre o fundo transparente
+        # Função para converter imagem local em base64
+        def get_base64_of_bin_file(bin_file):
+            with open(bin_file, 'rb') as f:
+                data = f.read()
+            return base64.b64encode(data).decode()
 
-    draw = ImageDraw.Draw(background)
+        # Caminho para a imagem local
+        image_path = 'fundoAzul.jpeg'
+        image_base64 = get_base64_of_bin_file(image_path)
 
-    # Desenha anotações
-    draw.ellipse((100, 100, 200, 200), outline="red", width=2)
-    font = ImageFont.truetype("arial.ttf", 24) 
-    draw.text((120, 150), "Anotação", fill="red", font=font)
+        # CSS para definir a imagem de fundo e o estilo da métrica
+        st.markdown(
+            f"""
+            <style>
+            .metric-container {{
+                position: relative;
+                width: 300px;
+                height: 200px;
+                background-image: url(data:image/jpeg;base64,{image_base64});
+                background-size: cover;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+            .metric-text {{
+                font-size: 48px;
+                color: white;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # Ajusta a opacidade da imagem inteira (0 = transparente, 255 = opaco)
-    opacity = 128  # Exemplo: 50% de opacidade
-    image_with_opacity = Image.blend(background, Image.new("RGBA", image.size, (255, 255, 255, opacity)), 0.5)
+        # HTML para criar a métrica com a imagem de fundo
+        metrica=st.markdown(
+            f"""
+            <div class="metric-container">
+                <div class="metric-text">
+                    {valor}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        return metrica
+    
+    def criaGrafico(x,y,color1,color2,valor1,valor2):
+        # Criar o gráfico de área
+        fig = go.Figure()
 
-    return st.image(image_with_opacity, caption="Imagem com Anotações e Opacidade")
+        fig.add_trace(go.Scatter(
+            x=x,
+            y=y,
+            mode='lines',
+            marker_line_color='black', 
+            fill='tozeroy',
+            fillcolor=color2,  # Preencher a área abaixo da linha
+            line=dict(color=color2),
+        ))
 
-    # Criar o gráfico de área
-    fig = go.Figure()
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            text=f"<b>Liquidado<br>R${valor1:,.0f}</b>".replace(',', '.'),
+            showarrow=False,
+            font=dict(size=30, color="WHITE"),
+            align="center",
+        )
 
-    fig.add_trace(go.Scatter(
-        x=dias,
-        y=valores,
-        mode='lines',
-        marker_line_color='black', 
-        fill='tozeroy',
-        fillcolor='rgba(255,215,0,0.1)',  # Preencher a área abaixo da linha
-        line=dict(color="rgba(255,215,0,0.5)"),
-    ))
- 
-    fig.add_annotation(
-        xref="paper", yref="paper",
-        x=0.5, y=0.5,
-        text=f"<b>Liquidado<br>R${totalLiq:,.0f}</b>".replace(',', '.'),
-        showarrow=False,
-        font=dict(size=30, color="WHITE"),
-        align="center",
-    )
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=1.01, y=1.03,
+            text=f"<b>{valor2:,.0f}%</b>".replace(',', '.'),
+            showarrow=False,
+            font=dict(size=30, color="green"),
+            align="center",
+        )
 
-    fig.add_annotation(
-        xref="paper", yref="paper",
-        x=0.99, y=0.99,
-        text=f"<b>{percentual_atingido:,.0f}%</b>".replace(',', '.'),
-        showarrow=False,
-        font=dict(size=30, color="green"),
-        align="center",
-    )
-
-    # Ajustar o layout do gráfico
-    fig.update_layout(
-        plot_bgcolor='rgba(255,215,0,0.05)',  
-        paper_bgcolor='rgba(255,215,0,0.05)', 
-        xaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
-        yaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
-        margin=dict(l=0, r=0, t=0, b=0),# Remover margens
-        showlegend=False,
-        height=110,
-        width=100
-    )
-
+        # Ajustar o layout do gráfico
+        fig.update_layout(
+            plot_bgcolor=color1,  
+            paper_bgcolor=color1 ,
+            xaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
+            yaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
+            margin=dict(l=0, r=0, t=0, b=0),# Remover margens
+            showlegend=False,
+            height=110,
+            width=100
+        )
+        return st.plotly_chart(fig, use_container_width=True)
+    
     # # Criar o layout de colunas no Streamlit para adicionar o mini-gráfico como métrica
     # col1, col2, col3 = st.columns([1, 3, 1])
 
     tab1, tab2 = st.tabs(["GeraL", "Tele"])
-    
+
     with tab1:
         col1, col2, col3, col4,col5,col6= st.columns([2,2,2,2,2,2])
 
@@ -434,9 +464,11 @@ def criaImagem():
 
         with col3:
             diaHj=dt.datetime.now().date().strftime("%d/%m/%Y")
-
+            color1='rgba(255,215,0,0.01)'
+            color2='rgba(255,215,0,0.05)'
+            
             # with st.container(border=True): 
-            st.plotly_chart(fig, use_container_width=True)
+            criaGrafico(dias,valores,color1,color2,totalLiq,percentual_atingido)
             # st.metric(label=f"Liquidado até {diaHj}", value=f"R${totalLiq:,.0f}".replace(',', '.'),delta=f"{percentual_atingido:.0f}% Atingido Meta")
                 
         with col4:
@@ -458,7 +490,7 @@ def criaImagem():
             with st.container(border=True): 
                 st.metric(label="Déficit/Superávit", value=f"R${valorDefSup:,.0f}".replace(',', '.'),delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}")
         with col6:
-            criaImagem()
+            criaImagem(aLiquidar,"appStreamlit/fundoAzul.jpeg")
         DfEqpFiltro,qtdeColabs = exibeEquipe(LiquidadoEquipeMerge,colaborador, optionsEqp, optionsRpt)
 
         if optionsEqp=='Telecobrança':
@@ -528,151 +560,151 @@ def criaImagem():
 
                 st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
 
-            # # Seu código para criar o gráfico
-            # fig, ax = plt.subplots(figsize=(25  , 27))  # Ajuste os valores conforme necessário
-            # colabs = grafCobGeral['Nome_Colaborador']
-            # y_pos = range(len(colabs))
-            # performance = grafCobGeral['Valor Liquidado']
+                # # Seu código para criar o gráfico
+                # fig, ax = plt.subplots(figsize=(25  , 27))  # Ajuste os valores conforme necessário
+                # colabs = grafCobGeral['Nome_Colaborador']
+                # y_pos = range(len(colabs))
+                # performance = grafCobGeral['Valor Liquidado']
 
-            # bars=ax.barh(y_pos, performance, align='center')
+                # bars=ax.barh(y_pos, performance, align='center')
 
-            # for bar, val in zip(bars, performance):
-            #     val=float(val)
-            #     meta=float(meta)
-            #     ax.text(bar.get_x() + bar.get_width(), bar.get_y() + bar.get_height() / 2, 
-            #         f'{(val/meta)*100:,.2f}%'.replace(',', '.'), color='white', fontweight='bold', fontsize=20, va='center')
+                # for bar, val in zip(bars, performance):
+                #     val=float(val)
+                #     meta=float(meta)
+                #     ax.text(bar.get_x() + bar.get_width(), bar.get_y() + bar.get_height() / 2, 
+                #         f'{(val/meta)*100:,.2f}%'.replace(',', '.'), color='white', fontweight='bold', fontsize=20, va='center')
 
-            # ax.vlines(x=meta, ymin=-1.5, ymax=len(colabs), color='red', linestyle='--', label='Meta')
-            # ax.text(meta, -1.5, f'Meta: {meta:,.0f}'.replace(',', '.'), color='red', fontsize=30, ha='right')
+                # ax.vlines(x=meta, ymin=-1.5, ymax=len(colabs), color='red', linestyle='--', label='Meta')
+                # ax.text(meta, -1.5, f'Meta: {meta:,.0f}'.replace(',', '.'), color='red', fontsize=30, ha='right')
 
-            # ax.set_yticks(y_pos)
-            # ax.set_yticklabels(colabs, color="white", fontsize=20,fontweight='bold')
-            # ax.invert_yaxis()
-            # ax.set_xlabel('Valor Liquidado')
-            # ax.set_title('Liquidado por Colaborador')
-            # ax.spines['top'].set_visible(False)
-            # ax.spines['left'].set_visible(False)
-            # ax.spines['right'].set_visible(False)
-            # ax.set_facecolor(color="none")
-            # fig.patch.set_alpha(0)
+                # ax.set_yticks(y_pos)
+                # ax.set_yticklabels(colabs, color="white", fontsize=20,fontweight='bold')
+                # ax.invert_yaxis()
+                # ax.set_xlabel('Valor Liquidado')
+                # ax.set_title('Liquidado por Colaborador')
+                # ax.spines['top'].set_visible(False)
+                # ax.spines['left'].set_visible(False)
+                # ax.spines['right'].set_visible(False)
+                # ax.set_facecolor(color="none")
+                # fig.patch.set_alpha(0)
+                
+                # # Ajuste a largura da figura para acomodar os nomes completos
+                # fig.tight_layout()
+
+                # # Salvar a figura como BytesIO
+                # image_stream = BytesIO()
+                # fig.savefig(image_stream, format="png")
+                # image_stream.seek(0)  # Voltar ao início do stream
+
+                # # Exibir a imagem sem use_container_width
+                # st.image(image_stream)
+
+            # with st.container(border=True,height=750):
+
+            cobranca_geral=cobranca_geral.merge(aliqcolabs,left_on='Nome_Colaborador',right_on='Criado Por',how='left')
+            metaDiaria=round(float(meta)/dias_uteis)
+            diasPassados=(dias_uteis-dias_uteis_falta)
+            # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
+            # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
+            # mes=dt.datetime.now().month
+            # if len(cobranca_geral[cobranca_geral['A Receber'].isna()])==len(cobranca_geral) or mesNum < mes:
+            #     cobranca_geral['A Receber']=0
+            # try:
+            #     agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','Nome_Colaborador','A Receber'], values='Valor Liquidado', aggfunc='sum').reset_index().sort_values(by='Valor Liquidado',ascending=False)
+
+            # except:
+                
+            #     agroupTab=cobranca_geral[['RANK','REPORTE','Nome_Colaborador','Valor Liquidado','A Receber']]
+            #     print(agroupTab['A Receber'], 'Baixo')
+
+            # agroupTab['% Atingido Meta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{x/meta*100:.2f}%")
+
+            # # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
+
+            # agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
+
+            # if diasPassados ==0:
+            #     diasPassados=1
+
+            # agroupTab['Realizado por Dia (Média)'] = (agroupTab['Valor Liquidado']-media_por_colaborador_dia['Valor Liquidado'])/(diasPassados-1)
+            # agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))        
+            # agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            # agroupTab['Realizado Total']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            # agroupTab['Falta']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x-meta:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            # agroupTab['% Falta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{(x/meta*100)-100:.2f}%")
             
-            # # Ajuste a largura da figura para acomodar os nomes completos
-            # fig.tight_layout()
+            # agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['Receber']=agroupTab['A Receber'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
+            # # Função para verificar se a meta foi batida
+            # def verificar_meta(row):
+            #     if row['Valor Liquidado'] >= meta:
+            #         return 'Meta Batida'
+            #     elif (row['Valor Liquidado']+ row['A Receber']) >= meta:
+            #         return 'Pode Bater Meta'
+            #     elif (row['Valor Liquidado']+ row['A Receber']+(dias_uteis_falta*metaDiaria)) >= meta:
+            #         return 'Chance de bater a meta'
+            #     else:
+            #         return 'Não irá bater Meta'
+                
+            # agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
 
-            # # Salvar a figura como BytesIO
-            # image_stream = BytesIO()
-            # fig.savefig(image_stream, format="png")
-            # image_stream.seek(0)  # Voltar ao início do stream
 
-            # # Exibir a imagem sem use_container_width
-            # st.image(image_stream)
-    
-        # with st.container(border=True,height=750):
-
-        cobranca_geral=cobranca_geral.merge(aliqcolabs,left_on='Nome_Colaborador',right_on='Criado Por',how='left')
-        metaDiaria=round(float(meta)/dias_uteis)
-        diasPassados=(dias_uteis-dias_uteis_falta)
-        # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
-        # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
-        # mes=dt.datetime.now().month
-        # if len(cobranca_geral[cobranca_geral['A Receber'].isna()])==len(cobranca_geral) or mesNum < mes:
-        #     cobranca_geral['A Receber']=0
-        # try:
-        #     agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','Nome_Colaborador','A Receber'], values='Valor Liquidado', aggfunc='sum').reset_index().sort_values(by='Valor Liquidado',ascending=False)
-
-        # except:
+            # agroupTab=agroupTab[['RANK','REPORTE','Nome_Colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
             
-        #     agroupTab=cobranca_geral[['RANK','REPORTE','Nome_Colaborador','Valor Liquidado','A Receber']]
-        #     print(agroupTab['A Receber'], 'Baixo')
+            # # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
+            # def color_text(value):
+            #     if value == 'Meta Batida':
+            #         color = 'blue'
+            #     elif value == 'Pode Bater Meta':
+            #         color = 'lightblue'
+            #     elif value == 'Chance de bater a meta':
+            #         color = 'orange'
+            #     elif value == 'Não irá bater Meta':
+            #         color = 'red'
+            #     else:
+            #         color = 'black'  # Cor padrão para outros valores
+            #     return f'color: {color};'
 
-        # agroupTab['% Atingido Meta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{x/meta*100:.2f}%")
+            # # agroupTab.set_index('RANK', inplace=True)
+            # # Aplicando a formatação condicional à coluna 'Resultado'
+            # styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
 
-        # # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
-
-        # agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
-
-        # if diasPassados ==0:
-        #     diasPassados=1
-
-        # agroupTab['Realizado por Dia (Média)'] = (agroupTab['Valor Liquidado']-media_por_colaborador_dia['Valor Liquidado'])/(diasPassados-1)
-        # agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))        
-        # agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-        # agroupTab['Realizado Total']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-        # agroupTab['Falta']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x-meta:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-        # agroupTab['% Falta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{(x/meta*100)-100:.2f}%")
-        
-        # agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
-        # agroupTab['Receber']=agroupTab['A Receber'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-        # # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
-        # # Função para verificar se a meta foi batida
-        # def verificar_meta(row):
-        #     if row['Valor Liquidado'] >= meta:
-        #         return 'Meta Batida'
-        #     elif (row['Valor Liquidado']+ row['A Receber']) >= meta:
-        #         return 'Pode Bater Meta'
-        #     elif (row['Valor Liquidado']+ row['A Receber']+(dias_uteis_falta*metaDiaria)) >= meta:
-        #         return 'Chance de bater a meta'
-        #     else:
-        #         return 'Não irá bater Meta'
+            # # Converte o DataFrame para HTML
+            # # Converte o DataFrame para HTML, removendo o índice
             
-        # agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
+            # # html_table = styled_df.to_html()
+            # # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
 
+            # # components.html(
+            # #     f"""
+            # #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+            # #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+            # #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
 
-        # agroupTab=agroupTab[['RANK','REPORTE','Nome_Colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
-        
-        # # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
-        # def color_text(value):
-        #     if value == 'Meta Batida':
-        #         color = 'blue'
-        #     elif value == 'Pode Bater Meta':
-        #         color = 'lightblue'
-        #     elif value == 'Chance de bater a meta':
-        #         color = 'orange'
-        #     elif value == 'Não irá bater Meta':
-        #         color = 'red'
-        #     else:
-        #         color = 'black'  # Cor padrão para outros valores
-        #     return f'color: {color};'
+            # #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
+            # #     """,
+            # #     height=800,
+            # # )
+            # # st.components.v1.html(html_table, height=500, scrolling=True)
+            # # st.markdown(html_table, unsafe_allow_html=True)
+            # # st.markdown(html_table_bot, unsafe_allow_html=True)
+            # st.dataframe(styled_df, hide_index=True, height=800, width=1100,use_container_width=True)
+            with col2:
+                pass
+        with tab2:        
+            # Carrega a imagem
+            image = Image.open("imagem_meta.jpg")
+            draw = ImageDraw.Draw(image)
 
-        # # agroupTab.set_index('RANK', inplace=True)
-        # # Aplicando a formatação condicional à coluna 'Resultado'
-        # styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
+            # Desenha anotações (exemplo: um círculo e texto)
+            draw.ellipse((100, 100, 200, 200), outline="red", width=2)
+            font = ImageFont.truetype("arial.ttf", 24)  # Use uma fonte disponível
+            draw.text((120, 150), "Anotação", fill="red", font=font)
 
-        # # Converte o DataFrame para HTML
-        # # Converte o DataFrame para HTML, removendo o índice
-        
-        # # html_table = styled_df.to_html()
-        # # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
-
-        # # components.html(
-        # #     f"""
-        # #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-        # #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-        # #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
-
-        # #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
-        # #     """,
-        # #     height=800,
-        # # )
-        # # st.components.v1.html(html_table, height=500, scrolling=True)
-        # # st.markdown(html_table, unsafe_allow_html=True)
-        # # st.markdown(html_table_bot, unsafe_allow_html=True)
-        # st.dataframe(styled_df, hide_index=True, height=800, width=1100,use_container_width=True)
-        with col2:
-            pass
-    with tab2:        
-        # Carrega a imagem
-        image = Image.open("imagem_meta.jpg")
-        draw = ImageDraw.Draw(image)
-
-        # Desenha anotações (exemplo: um círculo e texto)
-        draw.ellipse((100, 100, 200, 200), outline="red", width=2)
-        font = ImageFont.truetype("arial.ttf", 24)  # Use uma fonte disponível
-        draw.text((120, 150), "Anotação", fill="red", font=font)
-
-        # Exibe a imagem no Streamlit
-        st.image(image, caption="Imagem com Anotações")
+            # Exibe a imagem no Streamlit
+            st.image(image, caption="Imagem com Anotações")
 
