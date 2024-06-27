@@ -351,7 +351,7 @@ def run(user_info):
         # Calcula a liquidação acumulada
         LiqPordia['Liquidação Acumulada'] = LiqPordia['Valor Liquidado'].cumsum()
 
-    def criaImagem(valor,imagem):
+    def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=240,height=130):
 
         # Função para converter imagem local em base64
         def get_base64_of_bin_file(bin_file):
@@ -360,7 +360,7 @@ def run(user_info):
             return base64.b64encode(data).decode()
 
         # Caminho para a imagem local
-        image_path = 'fundoAzul.jpeg'
+        image_path = imagem
         image_base64 = get_base64_of_bin_file(image_path)
 
         # CSS para definir a imagem de fundo e o estilo da métrica
@@ -369,84 +369,57 @@ def run(user_info):
             <style>
             .metric-container {{
                 position: relative;
-                width: 300px;
-                height: 200px;
+                width: f"{width}"px;
+                height: f"{height}"px;
                 background-image: url(data:image/jpeg;base64,{image_base64});
                 background-size: cover;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                border-radius: 15px; /* Ajuste o valor para controlar a curvatura das bordas */
+                box-shadow: 5px 5px 10px rgba(192,192,192, 0.3); 
+                margin-bottom: 20px;
+                # margin:f"{t}px {r}px {b}px {l}px";
             }}
             .metric-text {{
-                font-size: 48px;
+                font-size: 25px;
                 color: white;
-                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+                # text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+                text-align: center;
+                margin:10px 0px 0px 0px;
+            }}
+            .metric-label {{
+                font-size: 20px;
+                display: block; /* Faz o texto ocupar uma linha inteira */
+                # margin-bottom: -29px; /* Ajuste o valor negativo para controlar o espaçamento */
+                margin:0px 0px -16px 0px;
+            }}
+            .metric-delta {{
+                font-size: 20px;
+                # text-align: center;
+                color: rgb(0,255,0);
+                display: block; /* Faz o texto ocupar uma linha inteira */
+                margin:-16px 0px 0px 0px; /* Ajuste o valor negativo para controlar o espaçamento */
             }}
             </style>
             """,
             unsafe_allow_html=True
         )
-
         # HTML para criar a métrica com a imagem de fundo
+
         metrica=st.markdown(
             f"""
             <div class="metric-container">
                 <div class="metric-text">
+                <span class="metric-label">{label}</span>
                     {valor}
+                <span class="metric-delta"><b>{Delta}</b></span>
                 </div>
             </div>
-            """,
+            """.replace(',', '.'),
             unsafe_allow_html=True
         )
         return metrica
-    
-    def criaGrafico(x,y,color1,color2,valor1,valor2):
-        # Criar o gráfico de área
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=x,
-            y=y,
-            mode='lines',
-            marker_line_color='black', 
-            fill='tozeroy',
-            fillcolor=color2,  # Preencher a área abaixo da linha
-            line=dict(color=color2),
-        ))
-
-        fig.add_annotation(
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            text=f"<b>Liquidado<br>R${valor1:,.0f}</b>".replace(',', '.'),
-            showarrow=False,
-            font=dict(size=30, color="WHITE"),
-            align="center",
-        )
-
-        fig.add_annotation(
-            xref="paper", yref="paper",
-            x=1.01, y=1.03,
-            text=f"<b>{valor2:,.0f}%</b>".replace(',', '.'),
-            showarrow=False,
-            font=dict(size=30, color="green"),
-            align="center",
-        )
-
-        # Ajustar o layout do gráfico
-        fig.update_layout(
-            plot_bgcolor=color1,  
-            paper_bgcolor=color1 ,
-            xaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
-            yaxis=dict(showgrid=False, visible=False),     # Remover grade e eixos
-            margin=dict(l=0, r=0, t=0, b=0),# Remover margens
-            showlegend=False,
-            height=110,
-            width=100
-        )
-        return st.plotly_chart(fig, use_container_width=True)
-    
-    # # Criar o layout de colunas no Streamlit para adicionar o mini-gráfico como métrica
-    # col1, col2, col3 = st.columns([1, 3, 1])
 
     tab1, tab2 = st.tabs(["GeraL", "Tele"])
 
@@ -454,21 +427,25 @@ def run(user_info):
         col1, col2, col3, col4,col5,col6= st.columns([2,2,2,2,2,2])
 
         with col1:
-            with st.container(border=True):
-                st.metric(label="Dias Úteis", value=f"{dias_uteis}",delta=f"-faltam {dias_uteis_falta} dias",delta_color='inverse')            
+            label="Dias de Trabalho"
+            criaImagem(dias_uteis,f"Faltam {dias_uteis_falta} dias",label,"fundoAzul.jpeg")
+                # st.metric(label="Dias Úteis", value=f"{dias_uteis}",delta=f"-faltam {dias_uteis_falta} dias",delta_color='inverse')            
 
         with col2:
-
-            with st.container(border=True): 
-                st.metric(label="Meta Liquidado", value=f"R${MetaLiq:,.0f}".replace(',', '.'), delta=f"{percentual_falta:.0f}% {'Para atingir meta' if percentual_falta<0 else 'Meta atingida'}")
+            label="Meta Liquidado"
+            M=f"R${MetaLiq:,.0f}".replace(',', '.')
+            D=f"{percentual_falta:.0f}% {'Para meta' if percentual_falta<0 else 'Meta atingida'}"
+            criaImagem(M,D,label,"fundoAzul.jpeg",b=20)
+            # st.metric(label="Meta Liquidado", value=f"R${MetaLiq:,.0f}".replace(',', '.'), delta=f"{percentual_falta:.0f}% {'Para atingir meta' if percentual_falta<0 else 'Meta atingida'}")
 
         with col3:
             diaHj=dt.datetime.now().date().strftime("%d/%m/%Y")
-            color1='rgba(255,215,0,0.01)'
-            color2='rgba(255,215,0,0.05)'
-            
+            liq=f"R${totalLiq:,.0f}".replace(',', '.')
+            D=f"{percentual_atingido:.0f}%"
+            label="Total Liquidado"
+            criaImagem(liq,D,label,"fundoAzul.jpeg",b=20)
             # with st.container(border=True): 
-            criaGrafico(dias,valores,color1,color2,totalLiq,percentual_atingido)
+            # criaGrafico(dias,valores,color1,color2,totalLiq,percentual_atingido)
             # st.metric(label=f"Liquidado até {diaHj}", value=f"R${totalLiq:,.0f}".replace(',', '.'),delta=f"{percentual_atingido:.0f}% Atingido Meta")
                 
         with col4:
@@ -476,21 +453,29 @@ def run(user_info):
             deltaMeta=f"{((totalLiq/dias_uteis)-metaDia)/metaDia:,.2f}%".replace(',', '.')
             valorDefSup=totalLiq-(MetaLiq/dias_uteis)*(dias_uteis-dias_uteis_falta)
             defsup=f"{valorDefSup:,.2f}".replace(",",";").replace(".",",").replace(";",".")
-            
+            label="Meta Diária"
 
-            with st.container(border=True): 
-                st.metric(label="Meta Diária", value=f"R${metaDia:,.0f}".replace(',', '.'),delta=f"{deltaMeta}")
+            criaImagem(f"R${metaDia:,.0f}".replace(',', '.'),f"{deltaMeta}",label,"fundoAzul.jpeg",b=20)
+
+            # with st.container(border=True): 
+            #     st.metric(label="Meta Diária", value=f"R${metaDia:,.0f}".replace(',', '.'),delta=f"{deltaMeta}")
 
         with col5:
             metaDia=MetaLiq/dias_uteis
             deltaMeta=f"{((totalLiq/dias_uteis)-metaDia)/metaDia:,.2f}%".replace(',', '.')
             valorDefSup=totalLiq-(MetaLiq/dias_uteis)*(dias_uteis-dias_uteis_falta)
             defsup=f"{valorDefSup:,.2f}".replace(",",";").replace(".",",").replace(";",".")
+            label="Déficit/Superávit"
+            value=f"R${valorDefSup:,.0f}".replace(',', '.')
+            delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}"
+            criaImagem(value,delta,label,"fundoAzul.jpeg",b=20)
 
-            with st.container(border=True): 
-                st.metric(label="Déficit/Superávit", value=f"R${valorDefSup:,.0f}".replace(',', '.'),delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}")
+            # with st.container(border=True): 
+            #     st.metric(label="Déficit/Superávit", value=f"R${valorDefSup:,.0f}".replace(',', '.'),delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}")
         with col6:
-            criaImagem(aLiquidar,"appStreamlit/fundoAzul.jpeg")
+            Delta=(aLiquidar/MetaLiq)*100
+            label=f"A Liquidar".replace(',', '.')
+            criaImagem(f"R${aLiquidar:,.0f}",f"{Delta:.2f}%",label,"fundoAzul.jpeg",b=20)
         DfEqpFiltro,qtdeColabs = exibeEquipe(LiquidadoEquipeMerge,colaborador, optionsEqp, optionsRpt)
 
         if optionsEqp=='Telecobrança':
@@ -503,101 +488,101 @@ def run(user_info):
         grafCobGeral=(cobranca_geral.groupby(['Nome_Colaborador','REPORTE','SIT_ATUAL'],as_index=False)['Valor Liquidado'].sum()).sort_values(by='Valor Liquidado',ascending=False)
         # st.dataframe(BaseLiqmes, hide_index=True, height=800, width=1100,use_container_width=True)
 
-        col1, col2 = st.columns([3,2])
+        col1, col2 = st.columns([2,2])
 
         with col1:
-            with st.container(border=True):
-                # Função para formatar números em formato curto
-                def format_number_short(value):
-                    if value >= 1_000_000:
-                        return f'{value / 1_000_000:.1f}M'
-                    elif value >= 1_000:
-                        return f'{value / 1_000:.1f}k'
-                    else:
-                        return str(value)
-                    
-                x = LiqPordia['Data Liquidacao']
-                y = LiqPordia['Liquidação Acumulada']
-                labels = [format_number_short(value) for value in y]
-                linha_meta = np.full(len(x), MetaLiq)
+            # with st.container(border=True):
+            # Função para formatar números em formato curto
+            def format_number_short(value):
+                if value >= 1_000_000:
+                    return f'{value / 1_000_000:.1f}M'
+                elif value >= 1_000:
+                    return f'{value / 1_000:.1f}k'
+                else:
+                    return str(value)
                 
-                #Gráfico de área
-                fig = go.Figure(go.Scatter(x=x, y=y, name="Liquidado",
-                                    line_shape='linear',mode='lines+markers',fill='tozeroy', 
-                                    fillcolor='rgba(135, 206, 235, 0.4)'
-                                    ))
-                # Adicione anotações para os rótulos de dados
-                for i, txt in enumerate(y):
-                    fig.add_annotation(
-                        x=x[i],
-                        y=y[i],
-                        text=str(format_number_short(txt)),  # Convertendo o valor para string, se necessário
-                        showarrow=False,
-                        textangle=-60,  # Ângulo de rotação do texto
-                        xanchor='center',
-                        yanchor='bottom',
-                        font=dict(size=12)
-                    )
-                #Linha de meta
-                fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
-                line=dict(color='Red', width=2, dash='dashdot'),
-                opacity=0.5,
-                name='Meta Diaria'))
-                
+            x = LiqPordia['Data Liquidacao']
+            y = LiqPordia['Liquidação Acumulada']
+            labels = [format_number_short(value) for value in y]
+            linha_meta = np.full(len(x), MetaLiq)
+            
+            #Gráfico de área
+            fig = go.Figure(go.Scatter(x=x, y=y, name="Liquidado",
+                                line_shape='linear',mode='lines+markers',fill='tozeroy', 
+                                fillcolor='rgba(106,90,205, 0.2)'
+                                ))
+            # Adicione anotações para os rótulos de dados
+            for i, txt in enumerate(y):
                 fig.add_annotation(
-                    x=x.iloc[0],
-                    y=MetaLiq,
-                    text=f"{MetaLiq:,.0f} Meta".replace(",","."),
+                    x=x[i],
+                    y=y[i],
+                    text=str(format_number_short(txt)),  # Convertendo o valor para string, se necessário
                     showarrow=False,
-                    yshift=10,
-                    font=dict(
-                        color="Red",
-                        size=12
-                    )
+                    textangle=-60,  # Ângulo de rotação do texto
+                    xanchor='center',
+                    yanchor='bottom',
+                    font=dict(size=12, color="rgba(255,250,250, 0.5)")
                 )
-                
-                fig.update_layout(title="Liquidação Acumulada por dia",height=350,margin=dict(l=60, r=20, t=60, b=60))
+            #Linha de meta
+            fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
+            line=dict(color='Red', width=2, dash='dashdot'),
+            opacity=0.5,
+            name='Meta Diaria'))
+            
+            fig.add_annotation(
+                x=x.iloc[0],
+                y=MetaLiq,
+                text=f"{MetaLiq:,.0f} Meta".replace(",","."),
+                showarrow=False,
+                yshift=10,
+                font=dict(
+                    color="Red",
+                    size=12
+                )
+            )
+            
+            fig.update_layout(title="Liquidação Acumulada por dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)")
 
-                st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+            st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
 
-                # # Seu código para criar o gráfico
-                # fig, ax = plt.subplots(figsize=(25  , 27))  # Ajuste os valores conforme necessário
-                # colabs = grafCobGeral['Nome_Colaborador']
-                # y_pos = range(len(colabs))
-                # performance = grafCobGeral['Valor Liquidado']
+            # # Seu código para criar o gráfico
+            # fig, ax = plt.subplots(figsize=(25  , 27))  # Ajuste os valores conforme necessário
+            # colabs = grafCobGeral['Nome_Colaborador']
+            # y_pos = range(len(colabs))
+            # performance = grafCobGeral['Valor Liquidado']
 
-                # bars=ax.barh(y_pos, performance, align='center')
+            # bars=ax.barh(y_pos, performance, align='center')
 
-                # for bar, val in zip(bars, performance):
-                #     val=float(val)
-                #     meta=float(meta)
-                #     ax.text(bar.get_x() + bar.get_width(), bar.get_y() + bar.get_height() / 2, 
-                #         f'{(val/meta)*100:,.2f}%'.replace(',', '.'), color='white', fontweight='bold', fontsize=20, va='center')
+            # for bar, val in zip(bars, performance):
+            #     val=float(val)
+            #     meta=float(meta)
+            #     ax.text(bar.get_x() + bar.get_width(), bar.get_y() + bar.get_height() / 2, 
+            #         f'{(val/meta)*100:,.2f}%'.replace(',', '.'), color='white', fontweight='bold', fontsize=20, va='center')
 
-                # ax.vlines(x=meta, ymin=-1.5, ymax=len(colabs), color='red', linestyle='--', label='Meta')
-                # ax.text(meta, -1.5, f'Meta: {meta:,.0f}'.replace(',', '.'), color='red', fontsize=30, ha='right')
+            # ax.vlines(x=meta, ymin=-1.5, ymax=len(colabs), color='red', linestyle='--', label='Meta')
+            # ax.text(meta, -1.5, f'Meta: {meta:,.0f}'.replace(',', '.'), color='red', fontsize=30, ha='right')
 
-                # ax.set_yticks(y_pos)
-                # ax.set_yticklabels(colabs, color="white", fontsize=20,fontweight='bold')
-                # ax.invert_yaxis()
-                # ax.set_xlabel('Valor Liquidado')
-                # ax.set_title('Liquidado por Colaborador')
-                # ax.spines['top'].set_visible(False)
-                # ax.spines['left'].set_visible(False)
-                # ax.spines['right'].set_visible(False)
-                # ax.set_facecolor(color="none")
-                # fig.patch.set_alpha(0)
-                
-                # # Ajuste a largura da figura para acomodar os nomes completos
-                # fig.tight_layout()
+            # ax.set_yticks(y_pos)
+            # ax.set_yticklabels(colabs, color="white", fontsize=20,fontweight='bold')
+            # ax.invert_yaxis()
+            # ax.set_xlabel('Valor Liquidado')
+            # ax.set_title('Liquidado por Colaborador')
+            # ax.spines['top'].set_visible(False)
+            # ax.spines['left'].set_visible(False)
+            # ax.spines['right'].set_visible(False)
+            # ax.set_facecolor(color="none")
+            # fig.patch.set_alpha(0)
+            
+            # # Ajuste a largura da figura para acomodar os nomes completos
+            # fig.tight_layout()
 
-                # # Salvar a figura como BytesIO
-                # image_stream = BytesIO()
-                # fig.savefig(image_stream, format="png")
-                # image_stream.seek(0)  # Voltar ao início do stream
+            # # Salvar a figura como BytesIO
+            # image_stream = BytesIO()
+            # fig.savefig(image_stream, format="png")
+            # image_stream.seek(0)  # Voltar ao início do stream
 
-                # # Exibir a imagem sem use_container_width
-                # st.image(image_stream)
+            # # Exibir a imagem sem use_container_width
+            # st.image(image_stream)
 
             # with st.container(border=True,height=750):
 
