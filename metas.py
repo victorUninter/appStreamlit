@@ -4,10 +4,6 @@ from pandas.tseries.offsets import BDay
 import datetime as dt
 from datetime import datetime
 import numpy as np
-import mysql.connector
-from mysql.connector.cursor import MySQLCursor
-import io
-from io import StringIO, BytesIO
 from dotenv import load_dotenv
 import os
 from streamlit.logger import get_logger
@@ -15,12 +11,13 @@ import matplotlib.pyplot as plt
 import calendar
 import requests
 import base64
-import html
 from streamlit_authenticator import Authenticate
 from sqlalchemy.orm import sessionmaker
 import plotly.graph_objects as go
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from classe import DbManager
+from sqlalchemy import create_engine, text, select,MetaData # Corrigido
+import mysql.connector
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
@@ -30,91 +27,23 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ttl=240.0
-# ttl=800.0
-# ttl=600
-
-@st.cache_data(ttl=3600000)
-def buscaDadosSQL(tabela,equipe=None):
-    global mesAtu
-
+def connect():
     config = {
-    'host': '77.37.40.212',
-    # 'host': 'localhost',
-    'user': 'root',
-    'port':'3306',
-    'password': os.getenv('MYSQL_ROOT_PASSWORD'),
-    'database': 'gestao_equipe'
-    }
-    mesAtu=dt.datetime.now().month
+            'host': '77.37.40.212',
+            'user': 'root',
+            'port': 3306,
+            'password': os.getenv('MYSQL_ROOT_PASSWORD'),
+            'database': 'gestao_equipe'
+        }
     try:
         conn = mysql.connector.connect(**config)
-        cursor = conn.cursor()
-        print("Conexão ao MySQL bem-sucedida!")
-    except mysql.connector.Error as err:
-        print(f"Erro ao conectar ao MySQL: {err}")
-        st.stop
-
-    if tabela == 'Equipe_Completa':
-        query=f"SELECT * FROM {tabela};"
-        Base=pd.read_sql(query, conn)
-        conn.close()
-        return Base
-    elif tabela=='metas_cobranca_geral':
-        query=f"SELECT * FROM {tabela};"
-        Base=pd.read_sql(query, conn)
-        conn.close()
-        return Base
-    elif tabela=='Liquidado':
-        query=f"""SELECT * FROM {tabela};"""
-        Base=pd.read_sql(query, conn)
-        Base=Base.drop_duplicates()
-        conn.close()
-        return Base
-    else:
-        query=f"SELECT * FROM {tabela};"
-        Base=pd.read_sql(query, conn)
-        conn.close()
-        return Base
-    
-@st.cache_data(ttl=500.0)
-def buscaDadosSQLMatual(tabela,mesAtu=None,equipe=None):
-    config = {
-    'host': '77.37.40.212',
-    # 'host': 'localhost',
-    'user': 'root',
-    'port':'3306',
-    'password': os.getenv('MYSQL_ROOT_PASSWORD'),
-    'database': 'gestao_equipe'
-    }
-
-    try:
-        conn = mysql.connector.connect(**config)
-        cursor = conn.cursor()
-        print("Conexão ao MySQL bem-sucedida!")
-    except mysql.connector.Error as err:
-        print(f"Erro ao conectar ao MySQL: {err}")
-        st.stop
-    if tabela != 'AtualizaBanco':
-        if tabela=="Liquidado":
-            query=f"""SELECT * FROM {tabela}
-                    WHERE MONTH(`Data Liquidacao`) = {mesAtu};"""
-            Base=pd.read_sql(query, conn)
-            Base=Base.drop_duplicates()
-            conn.close()
-            return Base
-        else:
-            query=f"""SELECT * FROM {tabela}
-                    WHERE MONTH(`Data Vencimento`) = {mesAtu};"""
-            Base=pd.read_sql(query, conn)
-            conn.close()
-            return Base
-    else:
-        query=f"""SELECT * FROM {tabela}"""
-        Base=pd.read_sql(query, conn)
-        conn.close()
-        return Base
-
+        # self.cursormysql.connector = self.conn.cursor()
+        st.info("Conexão ao MySQL bem-sucedida!")
+        return conn
+    except ConnectionError as err:
+        st.error(f"Erro ao conectar ao MySQL: {err}")
+        st.stop()
+        
 def dias_uteis_no_mes(ano, mes):
     data_inicial = pd.Timestamp(f'{ano}-{mes}-01')
     data_final = pd.Timestamp(f'{ano}-{mes + 1}-01') - pd.DateOffset(days=1)
@@ -141,9 +70,9 @@ def dias_uteis_que_faltam(mesNum):
 
 def exibeEquipe(LiquidadoEquipeMerge,colaborador,eqp,rpt):
     if colaborador == 'TODOS':
-        filtro_sit = LiquidadoEquipeMerge['Nome_Colaborador'].notnull()  # Qualquer valor diferente de NaN
+        filtro_sit = LiquidadoEquipeMerge['colaborador'].notnull()  # Qualquer valor diferente de NaN
     else:
-        filtro_sit = LiquidadoEquipeMerge['Nome_Colaborador'] == colaborador
+        filtro_sit = LiquidadoEquipeMerge['colaborador'] == colaborador
     if eqp == 'TODOS':
         filtro_eqp = LiquidadoEquipeMerge['EQUIPE'].notnull()  # Qualquer valor diferente de NaN
     else:
@@ -157,30 +86,25 @@ def exibeEquipe(LiquidadoEquipeMerge,colaborador,eqp,rpt):
     qtdeColabs=len(DfEqpFiltro)
     return DfEqpFiltro,qtdeColabs
 
-# Define uma função para criar um container personalizado com cor de fundo
-def colored_metric(content, color):
-    return f'<div style="display: flex;padding: 10px; background-color: rgb({color}/0.4); border: 2px solid white; border-radius: 5px;">{content}</div>'
+@st.cache_data(ttl=600)  
+def import_bases(tabela, mes=None, coluna=None, ano=None):
+    conn=connect()
+    with conn:
+        try:
+            # Construir a consulta SQL usando parâmetros nomeados
+            if mes and coluna:
+                query = f"SELECT * FROM {tabela} WHERE MONTH({coluna}) = {mes}"
+                params = {'mes': mes}
+            elif ano and coluna:
+                query = f"SELECT * FROM {tabela} WHERE YEAR({coluna}) = {ano}"
+           
+            else:
+                query = f"SELECT * FROM {tabela}"
+                params = {}
 
-def get_color(value):
-    return "255 0 0" if value < 0 else "50 205 50"
-
-#Relatório de Liquidação
-def import_base(mesNum):
-    mesAtu=mesNum
-    BaseLiqAnt=buscaDadosSQL('Liquidado')
-    BaseLiqAtu=buscaDadosSQLMatual('Liquidado',mesAtu,equipe=None)
-    BaseLiq=pd.concat([BaseLiqAnt,BaseLiqAtu])
-    BaseAliq=buscaDadosSQLMatual('Areceber',mesAtu)
-    try:
-        BaseLiq['Valor Liquidado']=BaseLiq['Valor Liquidado'].str.replace(",",".").astype(float)
-        BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
-    except:
-        pass
-
-    BaseLiq['Data Liquidacao']=pd.to_datetime(BaseLiq['Data Liquidacao'],dayfirst=True)
-    BaseAliq['Data Vencimento']=pd.to_datetime(BaseAliq['Data Vencimento'],dayfirst=True)
-
-    return BaseLiq,BaseAliq
+            return pd.read_sql(query, conn)  # Passe os parâmetros à consulta
+        except Exception as e:
+            print(f"Error: {e}")
 
 def run(user_info):
     # Adicionar um botão de logout no dashboard
@@ -188,17 +112,21 @@ def run(user_info):
     st.sidebar.image('marca-uninter-horizontal.webp', width=200)
 
     col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("<h1 style='text-align: left; font-size: 50px;'>ACOMPANHAMENTO DE METAS</h1>", unsafe_allow_html=True)
-        st.write(f"Bem-vindo, {user_info[0]} - {user_info[1]} - {user_info[2]}!") 
+    # with col1:
+    #     st.markdown("<h1 style='text-align: left; font-size: 50px;'>ACOMPANHAMENTO DE METAS</h1>", unsafe_allow_html=True)
+    st.write(f"Bem-vindo, {user_info[0]} - {user_info[1]} - {user_info[2]}!") 
         
-            
-    EquipeGeral=buscaDadosSQL('Equipe_Completa')
-    atualizacao=buscaDadosSQLMatual('AtualizaBanco')
+    EquipeGeral = import_bases('Equipe_Completa')
+    # conn=bd.connect()
+    # EquipeGeral=bases.importBases('Equipe_Completa')
+ 
+    atualizacao=import_bases('AtualizaBanco')
+        
     atualizacaoData=atualizacao.iloc[-1,0].strftime("%d/%m/%Y")
     atualizacaoHora=atualizacao.iloc[-1,1]
 
     EquipeMetas=EquipeGeral[EquipeGeral['EQUIPE']!='MARCOS']
+    
     colaborador=list(EquipeMetas['Nome_Colaborador'].unique())
     colaborador.insert(0,'TODOS')
     Equipe=list(EquipeMetas['EQUIPE'].unique())
@@ -241,9 +169,13 @@ def run(user_info):
             st.session_state.authenticated = False
             del st.session_state.user_info 
             st.experimental_rerun()
-            
-        BaseLiq,BaseAliq=import_base(mesNum)
+        mesNum=6
+        anoLiq=2024
+        BaseLiq=import_bases('view_CobrancaGeral',mesNum,coluna='data_liquidacao')
+        BaseAliq=import_bases('Areceber',mes=mesNum)
+        
         BaseLiq=BaseLiq.drop_duplicates()
+        
         try:
             BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
         except:
@@ -255,40 +187,19 @@ def run(user_info):
 
         aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
 
-        BaseLiqmes=BaseLiq.loc[(BaseLiq['Data Liquidacao'].dt.month==mesNum) & (BaseLiq['Data Liquidacao'].dt.year==anoLiq)]
-
         BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
 
         BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
 
         BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
+        
+        LiquidadoEquipeMerge=BaseLiq.groupby('colaborador',as_index=False).agg({'valor_liquidado':'sum','EQUIPE':'first', 'REPORTE':'first'})
 
-        acordoOnline=BaseLiqmes[BaseLiqmes['Criado Por']=='Acordo Online']
+        LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valor_liquidado',ascending=False)
 
-        BaseLiqSemAO=BaseLiqmes[BaseLiqmes['Criado Por']!='Acordo Online']
+        LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valor_liquidado'].rank(method='dense', ascending=False).astype(int)
 
-        LiquidadoEquipe=BaseLiqSemAO[BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
-
-        LiquidadoEquipeMerge=BaseLiqSemAO.merge(EquipeGeral,left_on='Criado Por',right_on='Nome_Colaborador')
-
-        LiquidadoEquipeMerge['valorPcolab']=LiquidadoEquipeMerge.groupby('Nome_Colaborador')['Valor Liquidado'].transform(sum)
-
-        LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valorPcolab',ascending=False)
-
-        LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valorPcolab'].rank(method='dense', ascending=False).astype(int)
-
-        cobranca_geral=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='COBRANÇA_GERAL']
-
-        telecobranca=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='Telecobrança']
-
-        Apoio=LiquidadoEquipeMerge[LiquidadoEquipeMerge['EQUIPE']=='MARCOS']
-
-        ColabsExternos=BaseLiqSemAO[~BaseLiqSemAO['Criado Por'].isin(EquipeGeral['Nome_Colaborador'])]
-
-        # cobranca_geral.columns
-        # cobranca_geral.groupby(['REPORTE','Nome_Colaborador'],as_index=False)['Valor Liquidado'].sum()
-
-        metas=buscaDadosSQL('metas_cobranca_geral',equipe=None)
+        metas=import_bases('metas_cobranca_geral')
         metas['Mes']=metas['Mês'].dt.month
         metas['Ano']=metas['Mês'].dt.year
         metasFiltro=metas.loc[(metas['Mes']==mesNum) & (metas['Ano']==anoLiq)]
@@ -301,16 +212,8 @@ def run(user_info):
         dias_uteis=dias_uteis_no_mes(anoLiq, mesNum)
         dias_uteis_falta=dias_uteis_que_faltam(mesNum)
 
-        # token=os.getenv('token')
-        token=os.getenv('token')
-        r = requests.get(f'https://api.invertexto.com/v1/holidays/{anoLiq}?token={token}&state=PR',verify=False)
-        feriados=r.json()
+        feriadosDF=import_bases('feriados')
 
-        feriadoNacionais=[data['date'] for data in feriados]
-
-        feriadosDF=pd.DataFrame(feriadoNacionais,columns=["Data"])
-        feriadosDF["Data"]=pd.to_datetime(feriadosDF["Data"])
-        feriadosDF["DiaSemana"]=feriadosDF["Data"].dt.strftime("%A")
         feriadosDF["Mês"]=feriadosDF["Data"].dt.month
         domingo="Sunday"
         sabado="Saturday"
@@ -329,29 +232,21 @@ def run(user_info):
             dias_uteis_falta=dias_uteis_falta-nFer
 
         diaHj=dt.datetime.now().day
-        cobgeral=cobranca_geral['Valor Liquidado'].sum()
-        tele=telecobranca['Valor Liquidado'].sum()
-        acOn=acordoOnline['Valor Liquidado'].sum()
-        totalLiq=BaseLiqmes['Valor Liquidado'].sum()
-        liqDia=BaseLiqmes.loc[(BaseLiqmes['Data Liquidacao'].dt.day==diaHj),'Valor Liquidado'].sum()
+
+        totalLiq=BaseLiq['valor_liquidado'].sum()
+
         aLiquidar=BaseAliqMetas['A Receber'].sum()
-        faltaMeta=totalLiq-MetaLiq
-        faltaMetaTele=tele-MetaTele
-        dados_dias_anteriores = BaseLiqmes[BaseLiqmes['Data Liquidacao'].dt.day < diaHj]
 
-        media_por_colaborador_dia = dados_dias_anteriores.groupby('Criado Por',as_index=False)['Valor Liquidado'].mean()
+        LiqPordia=BaseLiq.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
 
-        LiqPordia=BaseLiqmes.groupby('Data Liquidacao',as_index=False)['Valor Liquidado'].sum()
-        dias = LiqPordia['Data Liquidacao']
-        valores = LiqPordia['Valor Liquidado']
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
         # Dados de exemplo: datas e valores de liquidação diária
 
         # Calcula a liquidação acumulada
-        LiqPordia['Liquidação Acumulada'] = LiqPordia['Valor Liquidado'].cumsum()
+        LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
 
-    def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=240,height=130):
+    def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=250,height=160):
 
         # Função para converter imagem local em base64
         def get_base64_of_bin_file(bin_file):
@@ -380,26 +275,27 @@ def run(user_info):
                 box-shadow: 5px 5px 10px rgba(192,192,192, 0.3); 
                 margin-bottom: 20px;
                 # margin:f"{t}px {r}px {b}px {l}px";
+
             }}
             .metric-text {{
-                font-size: 25px;
-                color: white;
+                font-size: 20px;
+                color: rgb(204, 186, 186);
                 # text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
                 text-align: center;
                 margin:10px 0px 0px 0px;
             }}
             .metric-label {{
-                font-size: 20px;
+                font-size: 15px;
                 display: block; /* Faz o texto ocupar uma linha inteira */
                 # margin-bottom: -29px; /* Ajuste o valor negativo para controlar o espaçamento */
-                margin:0px 0px -16px 0px;
+                margin:5px 0px -14px 0px;
             }}
             .metric-delta {{
-                font-size: 20px;
+                font-size: 15px;
                 # text-align: center;
                 color: rgb(0,255,0);
                 display: block; /* Faz o texto ocupar uma linha inteira */
-                margin:-16px 0px 0px 0px; /* Ajuste o valor negativo para controlar o espaçamento */
+                margin:-14px 0px 5px 0px; /* Ajuste o valor negativo para controlar o espaçamento */
             }}
             </style>
             """,
@@ -434,7 +330,7 @@ def run(user_info):
         with col2:
             label="Meta Liquidado"
             M=f"R${MetaLiq:,.0f}".replace(',', '.')
-            D=f"{percentual_falta:.0f}% {'Para meta' if percentual_falta<0 else 'Meta atingida'}"
+            D=f"{percentual_falta:.2f}% {'' if percentual_falta<0 else 'Meta atingida'}"
             criaImagem(M,D,label,"fundoAzul.jpeg",b=20)
             # st.metric(label="Meta Liquidado", value=f"R${MetaLiq:,.0f}".replace(',', '.'), delta=f"{percentual_falta:.0f}% {'Para atingir meta' if percentual_falta<0 else 'Meta atingida'}")
 
@@ -489,8 +385,9 @@ def run(user_info):
         # st.dataframe(BaseLiqmes, hide_index=True, height=800, width=1100,use_container_width=True)
 
         col1, col2 = st.columns([2,2])
-
         with col1:
+            #GRÁFICO PARA MOSTRAR LIQUIDADO POR DIA
+
             # with st.container(border=True):
             # Função para formatar números em formato curto
             def format_number_short(value):
@@ -502,14 +399,15 @@ def run(user_info):
                     return str(value)
                 
             x = LiqPordia['Data Liquidacao']
-            y = LiqPordia['Liquidação Acumulada']
+            y = LiqPordia['Valor Liquidado']
+
             labels = [format_number_short(value) for value in y]
-            linha_meta = np.full(len(x), MetaLiq)
+            linha_meta = np.full(len(x), metaDia)
             
             #Gráfico de área
             fig = go.Figure(go.Scatter(x=x, y=y, name="Liquidado",
                                 line_shape='linear',mode='lines+markers',fill='tozeroy', 
-                                fillcolor='rgba(106,90,205, 0.2)'
+                                fillcolor='rgba(106,90,205, 0.2)',showlegend=False
                                 ))
             # Adicione anotações para os rótulos de dados
             for i, txt in enumerate(y):
@@ -518,7 +416,7 @@ def run(user_info):
                     y=y[i],
                     text=str(format_number_short(txt)),  # Convertendo o valor para string, se necessário
                     showarrow=False,
-                    textangle=-60,  # Ângulo de rotação do texto
+                    textangle=-70,  # Ângulo de rotação do texto
                     xanchor='center',
                     yanchor='bottom',
                     font=dict(size=12, color="rgba(255,250,250, 0.5)")
@@ -527,7 +425,71 @@ def run(user_info):
             fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
             line=dict(color='Red', width=2, dash='dashdot'),
             opacity=0.5,
-            name='Meta Diaria'))
+            name='Meta Diaria'),
+            )
+            
+            fig.add_annotation(
+                x=x.iloc[0],
+                y=metaDia,
+                text=f"{metaDia:,.2f}".replace(",","."),
+                showarrow=False,
+                yshift=10,
+                font=dict(
+                    color="Red",
+                    size=12
+                )
+            )
+            
+            fig.update_layout(title="Liquidação por dia X Meta Dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)",showlegend=False)
+
+            st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+        with col2:
+            #GRÁFICO PARA MOSTRAR LIQUIDADO ACUMULADO POR DIA
+            LiqPordiaOn=BaseLiq.query("@LiqPordia['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+
+            # with st.container(border=True):
+            # Função para formatar números em formato curto
+            def format_number_short(value):
+                if value >= 1_000_000:
+                    return f'{value / 1_000_000:.1f}M'
+                elif value >= 1_000:
+                    return f'{value / 1_000:.1f}k'
+                else:
+                    return str(value)
+
+            x = LiqPordia['data_liquidacao']
+            y = LiqPordia['Liquidação Acumulada']
+            labels = [format_number_short(value) for value in y]
+            linha_meta = np.full(len(x), MetaLiq)
+
+            x2 = LiqPordiaOn['data_liquidacao']
+            y2 = LiqPordiaOn['valor_liquidado']
+            labels = [format_number_short(value) for value in y]
+            
+            #Gráfico de área
+            fig = go.Figure(
+                go.Bar(x=x, y=y, name="Liquidado Equipe"),
+                go.Bar(name='Acordo Online', x=x2, y=y2),
+                showlegend=False
+                                )
+            # Adicione anotações para os rótulos de dados
+            for i, txt in enumerate(y):
+                fig.add_annotation(
+                    x=x[i],
+                    y=y[i],
+                    text=str(format_number_short(txt)),  # Convertendo o valor para string, se necessário
+                    showarrow=False,
+                    textangle=-70,  # Ângulo de rotação do texto
+                    xanchor='center',
+                    yanchor='bottom',
+                    font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                )
+            #Linha de meta
+            fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
+            line=dict(color='Red', width=2, dash='dashdot'),
+            opacity=0.5,
+            name='Meta Diaria'),
+            )
             
             fig.add_annotation(
                 x=x.iloc[0],
@@ -541,7 +503,7 @@ def run(user_info):
                 )
             )
             
-            fig.update_layout(title="Liquidação Acumulada por dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)")
+            fig.update_layout(title="Liquidação Acumulada por dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)",showlegend=False)
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
 

@@ -7,11 +7,7 @@ import mysql.connector
 from sqlalchemy import create_engine, text, select,MetaData # Corrigido
 from sqlalchemy.orm import sessionmaker
 import os
-import calendar
-import requests
-import base64
 from werkzeug.security import generate_password_hash, check_password_hash
-import hashlib
 
 load_dotenv()
 
@@ -21,44 +17,29 @@ class DbManager:
         self.config = {
             'host': '77.37.40.212',
             'user': 'root',
-            'port': '3306',
+            'port': 3306,
             'password': os.getenv('MYSQL_ROOT_PASSWORD'),
             'database': 'gestao_equipe'
         }
 
     def connect(self):
+        # ccnx = _mysql_connector.MySQL()
         try:
             self.conn = mysql.connector.connect(**self.config)
-            self.cursor = self.conn.cursor()
+            # self.cursor = self.conn.cursor()
             st.info("Conexão ao MySQL bem-sucedida!")
             return self.conn
-        except mysql.connector.Error as err:
+        except ConnectionError as err:
             st.error(f"Erro ao conectar ao MySQL: {err}")
             st.stop()
-    
+            
     def connectAlc(self):
         # Substitua pelos seus detalhes de conexão
         return create_engine(f'mysql+mysqlconnector://{self.config["user"]}:{self.config["password"]}@{self.config["host"]}/{self.config["database"]}')
 
     def disconnect(self):
         if self.conn:
-            self.conn.close()
-
-class Bases:
-    def __init__(self, db_manager):
-        self.db_manager = db_manager
-
-    def importBases(self,tabela,mes=None,coluna=None,ano=None):
-        if mes and coluna: 
-            query = f"SELECT * FROM {tabela} WHERE MONTH(`{coluna}`) = {mes};"
-            return pd.read_sql(query, self.db_manager) 
-        elif ano and coluna:
-            query = f"SELECT * FROM {tabela} WHERE YEAR(`{coluna}`) = {ano};"
-            return pd.read_sql(query, self.db_manager) 
-        else:
-            query = f"SELECT * FROM {tabela};"
-            return pd.read_sql(query, self.db_manager) 
-        
+            self.conn.close()    
 class Login:
     def __init__(self, db_manager):
         self.db_manager = db_manager
