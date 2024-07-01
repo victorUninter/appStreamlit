@@ -38,7 +38,7 @@ def connect():
     try:
         conn = mysql.connector.connect(**config)
         # self.cursormysql.connector = self.conn.cursor()
-        st.info("Conexão ao MySQL bem-sucedida!")
+        # st.info("Conexão ao MySQL bem-sucedida!")
         return conn
     except ConnectionError as err:
         st.error(f"Erro ao conectar ao MySQL: {err}")
@@ -374,15 +374,15 @@ def run(user_info):
             criaImagem(f"R${aLiquidar:,.0f}",f"{Delta:.2f}%",label,"fundoAzul.jpeg",b=20)
         DfEqpFiltro,qtdeColabs = exibeEquipe(LiquidadoEquipeMerge,colaborador, optionsEqp, optionsRpt)
 
-        if optionsEqp=='Telecobrança':
-            cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE_TELE'")
-            meta=MetaindividualTele
-        else:
-            cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE'")
-            meta=Metaindividual
+        # if optionsEqp=='Telecobrança':
+        #     cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE_TELE'")
+        #     meta=MetaindividualTele
+        # else:
+        #     cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE'")
+        #     meta=Metaindividual
 
-        grafCobGeral=(cobranca_geral.groupby(['Nome_Colaborador','REPORTE','SIT_ATUAL'],as_index=False)['Valor Liquidado'].sum()).sort_values(by='Valor Liquidado',ascending=False)
-        # st.dataframe(BaseLiqmes, hide_index=True, height=800, width=1100,use_container_width=True)
+        # grafCobGeral=(cobranca_geral.groupby(['Nome_Colaborador','REPORTE','SIT_ATUAL'],as_index=False)['Valor Liquidado'].sum()).sort_values(by='Valor Liquidado',ascending=False)
+        # # st.dataframe(BaseLiqmes, hide_index=True, height=800, width=1100,use_container_width=True)
 
         col1, col2 = st.columns([2,2])
         with col1:
@@ -398,8 +398,8 @@ def run(user_info):
                 else:
                     return str(value)
                 
-            x = LiqPordia['Data Liquidacao']
-            y = LiqPordia['Valor Liquidado']
+            x = LiqPordia['data_liquidacao']
+            y = LiqPordia['valor_liquidado']
 
             labels = [format_number_short(value) for value in y]
             linha_meta = np.full(len(x), metaDia)
@@ -445,8 +445,10 @@ def run(user_info):
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
         with col2:
             #GRÁFICO PARA MOSTRAR LIQUIDADO ACUMULADO POR DIA
-            LiqPordiaOn=BaseLiq.query("@LiqPordia['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
-
+            LiqPordiaGer=BaseLiq.query("@BaseLiq['colaborador']!='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordiaGer['Liquidação Acumulada']=LiqPordiaGer['valor_liquidado'].cumsum()
+            LiqPordiaOn=BaseLiq.query("@BaseLiq['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordiaOn['Liquidação Acumulada']=LiqPordiaOn['valor_liquidado'].cumsum()
             # with st.container(border=True):
             # Função para formatar números em formato curto
             def format_number_short(value):
@@ -457,40 +459,66 @@ def run(user_info):
                 else:
                     return str(value)
 
-            x = LiqPordia['data_liquidacao']
-            y = LiqPordia['Liquidação Acumulada']
+            x = LiqPordiaGer['data_liquidacao']
+            y = LiqPordiaGer['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
             linha_meta = np.full(len(x), MetaLiq)
 
             x2 = LiqPordiaOn['data_liquidacao']
-            y2 = LiqPordiaOn['valor_liquidado']
+            y2 = LiqPordiaOn['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
-            
-            #Gráfico de área
-            fig = go.Figure(
+
+            # Criação dos traços do gráfico
+            data = [
                 go.Bar(x=x, y=y, name="Liquidado Equipe"),
-                go.Bar(name='Acordo Online', x=x2, y=y2),
-                showlegend=False
-                                )
+                go.Bar(name='Acordo Online', x=x2, y=y2)
+            ]
+            
+            # Layout do gráfico
+            layout = go.Layout(
+                title="Liquidação Acumulada por dia",
+                height=350,
+                margin=dict(l=60, r=20, t=80, b=60),
+                plot_bgcolor="rgba(128,128,128,0.1)",
+                paper_bgcolor="rgba(128,128,128,0.1)",
+                showlegend=False,
+                barmode='stack'
+            )
+
+            #Gráfico de área
+            fig = go.Figure(data=data, layout=layout)
+
             # Adicione anotações para os rótulos de dados
-            for i, txt in enumerate(y):
+            for i, txt in enumerate(y+y2):
                 fig.add_annotation(
-                    x=x[i],
-                    y=y[i],
-                    text=str(format_number_short(txt)),  # Convertendo o valor para string, se necessário
+                    x=x2[i],
+                    y=y[i]+y2[i],
+                    text=str(format_number_short(txt)), 
                     showarrow=False,
-                    textangle=-70,  # Ângulo de rotação do texto
+                    textangle=-70,
                     xanchor='center',
-                    yanchor='bottom',
+                    yanchor='top',
+                    yshift=35,
                     font=dict(size=12, color="rgba(255,250,250, 0.5)")
                 )
+            # for i, txt in enumerate(y):
+            #     fig.add_annotation(
+            #         x=x[i],
+            #         y=y[i],
+            #         text=str(format_number_short(txt)), 
+            #         showarrow=False,
+            #         textangle=-70,
+            #         xanchor='center',
+            #         yanchor='bottom',
+            #         font=dict(size=12, color="rgba(255,250,250, 0.5)")
+            #     )
             #Linha de meta
             fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
             line=dict(color='Red', width=2, dash='dashdot'),
             opacity=0.5,
             name='Meta Diaria'),
             )
-            
+
             fig.add_annotation(
                 x=x.iloc[0],
                 y=MetaLiq,
@@ -502,8 +530,6 @@ def run(user_info):
                     size=12
                 )
             )
-            
-            fig.update_layout(title="Liquidação Acumulada por dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)",showlegend=False)
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
 
@@ -548,9 +574,9 @@ def run(user_info):
 
             # with st.container(border=True,height=750):
 
-            cobranca_geral=cobranca_geral.merge(aliqcolabs,left_on='Nome_Colaborador',right_on='Criado Por',how='left')
-            metaDiaria=round(float(meta)/dias_uteis)
-            diasPassados=(dias_uteis-dias_uteis_falta)
+            # cobranca_geral=cobranca_geral.merge(aliqcolabs,left_on='Nome_Colaborador',right_on='Criado Por',how='left')
+            # metaDiaria=round(float(meta)/dias_uteis)
+            # diasPassados=(dias_uteis-dias_uteis_falta)
             # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
             # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
             # mes=dt.datetime.now().month
