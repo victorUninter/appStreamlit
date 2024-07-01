@@ -180,13 +180,15 @@ def run(user_info):
             BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
         except:
             pass
+        
+        BaseAliq['Data Vencimento']=pd.to_datetime(BaseAliq['Data Vencimento'],dayfirst=True)
 
         aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
 
         aliqcolabs=aliqcolabs.groupby('Criado Por',as_index=False)['Valor Original'].sum()
 
         aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
-
+        
         BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
 
         BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
