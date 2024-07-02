@@ -69,14 +69,21 @@ def dias_uteis_que_faltam(mesNum):
         return 1
 
 def exibeEquipe(LiquidadoEquipeMerge,colaborador,eqp,rpt):
-    if colaborador == 'TODOS':
-        filtro_sit = LiquidadoEquipeMerge['colaborador'].notnull()  # Qualquer valor diferente de NaN
+    if eqp=='COBRANÇA_GERAL':
+        filtro_eqp = LiquidadoEquipeMerge['EQUIPE'] != "Telecobrança"
+        if colaborador == 'TODOS':
+            filtro_sit = LiquidadoEquipeMerge['colaborador'].notnull()  # Qualquer valor diferente de NaN
+        else:
+            filtro_sit = LiquidadoEquipeMerge['colaborador'] == colaborador
+    # if eqp == 'TODOS':
+    #     filtro_eqp = LiquidadoEquipeMerge['EQUIPE'].notnull()  # Qualquer valor diferente de NaN
     else:
-        filtro_sit = LiquidadoEquipeMerge['colaborador'] == colaborador
-    if eqp == 'TODOS':
-        filtro_eqp = LiquidadoEquipeMerge['EQUIPE'].notnull()  # Qualquer valor diferente de NaN
-    else:
-        filtro_eqp = LiquidadoEquipeMerge['EQUIPE'] == eqp
+        filtro_eqp = LiquidadoEquipeMerge['EQUIPE'] == "Telecobrança"
+        if colaborador == 'TODOS':
+            filtro_sit = LiquidadoEquipeMerge['colaborador'].notnull()  # Qualquer valor diferente de NaN
+        else:
+            filtro_sit = LiquidadoEquipeMerge['colaborador'] == colaborador
+            
     if rpt == 'TODOS':
         filtro_rpt = LiquidadoEquipeMerge['REPORTE'].notnull()  # Qualquer valor diferente de NaN
     else:
@@ -86,7 +93,6 @@ def exibeEquipe(LiquidadoEquipeMerge,colaborador,eqp,rpt):
     qtdeColabs=len(DfEqpFiltro)
     return DfEqpFiltro,qtdeColabs
 
-@st.cache_data(ttl=600)  
 def import_bases(tabela, mes=None, coluna=None, ano=None):
     conn=connect()
     with conn:
@@ -94,17 +100,17 @@ def import_bases(tabela, mes=None, coluna=None, ano=None):
             # Construir a consulta SQL usando parâmetros nomeados
             if mes and coluna:
                 query = f"SELECT * FROM {tabela} WHERE MONTH({coluna}) = {mes}"
-                params = {'mes': mes}
+                
             elif ano and coluna:
                 query = f"SELECT * FROM {tabela} WHERE YEAR({coluna}) = {ano}"
-           
+            
             else:
                 query = f"SELECT * FROM {tabela}"
-                params = {}
 
             return pd.read_sql(query, conn)  # Passe os parâmetros à consulta
         except Exception as e:
             print(f"Error: {e}")
+
 
 def run(user_info):
     # Adicionar um botão de logout no dashboard
@@ -130,7 +136,7 @@ def run(user_info):
     colaborador=list(EquipeMetas['Nome_Colaborador'].unique())
     colaborador.insert(0,'TODOS')
     Equipe=list(EquipeMetas['EQUIPE'].unique())
-    Equipe.insert(0,'TODOS')
+    # Equipe.insert(0,'TODOS')
     Reporte=list(EquipeMetas['REPORTE'].unique())
     Reporte.insert(0,'TODOS')
 
@@ -169,8 +175,7 @@ def run(user_info):
             st.session_state.authenticated = False
             del st.session_state.user_info 
             st.experimental_rerun()
-        mesNum=6
-        anoLiq=2024
+      
         BaseLiq=import_bases('view_CobrancaGeral',mesNum,coluna='data_liquidacao')
         BaseAliq=import_bases('Areceber',mes=mesNum)
         
@@ -208,9 +213,9 @@ def run(user_info):
         MetaLiq=list(metasFiltro['Meta_geral'])[0]
         MetaTele=list(metasFiltro['Meta_Tele'])[0]
         Metaindividual=list(metasFiltro['Meta_Individual'])[0]
-        print(Metaindividual)
+ 
         MetaindividualTele=list(metasFiltro['Meta_Individual_Tele'])[0]
-        print(MetaindividualTele)
+   
         dias_uteis=dias_uteis_no_mes(anoLiq, mesNum)
         dias_uteis_falta=dias_uteis_que_faltam(mesNum)
 
@@ -234,12 +239,14 @@ def run(user_info):
             dias_uteis_falta=dias_uteis_falta-nFer
 
         diaHj=dt.datetime.now().day
-
-        totalLiq=BaseLiq['valor_liquidado'].sum()
+        
+        DfEqpFiltro,qtdeColabs = exibeEquipe(BaseLiq,colaborador, optionsEqp, optionsRpt)
+        
+        totalLiq=DfEqpFiltro['valor_liquidado'].sum()
 
         aLiquidar=BaseAliqMetas['A Receber'].sum()
-
-        LiqPordia=BaseLiq.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+        
+        LiqPordia=DfEqpFiltro.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
 
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
@@ -247,7 +254,11 @@ def run(user_info):
 
         # Calcula a liquidação acumulada
         LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
-
+        
+    if optionsEqp=='Telecobrança':
+        MetaLiq=MetaTele
+        percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
+        percentual_atingido=(totalLiq/MetaLiq) * 100
     def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=250,height=160):
 
         # Função para converter imagem local em base64
@@ -319,7 +330,7 @@ def run(user_info):
         )
         return metrica
 
-    tab1, tab2 = st.tabs(["GeraL", "Tele"])
+    tab1, tab2 = st.tabs(["Home", "Tele"])
 
     with tab1:
         col1, col2, col3, col4,col5,col6= st.columns([2,2,2,2,2,2])
@@ -374,17 +385,6 @@ def run(user_info):
             Delta=(aLiquidar/MetaLiq)*100
             label=f"A Liquidar".replace(',', '.')
             criaImagem(f"R${aLiquidar:,.0f}",f"{Delta:.2f}%",label,"fundoAzul.jpeg",b=20)
-        DfEqpFiltro,qtdeColabs = exibeEquipe(LiquidadoEquipeMerge,colaborador, optionsEqp, optionsRpt)
-
-        # if optionsEqp=='Telecobrança':
-        #     cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE_TELE'")
-        #     meta=MetaindividualTele
-        # else:
-        #     cobranca_geral=DfEqpFiltro.query("CARGO=='ASSISTENTE'")
-        #     meta=Metaindividual
-
-        # grafCobGeral=(cobranca_geral.groupby(['Nome_Colaborador','REPORTE','SIT_ATUAL'],as_index=False)['Valor Liquidado'].sum()).sort_values(by='Valor Liquidado',ascending=False)
-        # # st.dataframe(BaseLiqmes, hide_index=True, height=800, width=1100,use_container_width=True)
 
         col1, col2 = st.columns([2,2])
         with col1:
@@ -446,13 +446,78 @@ def run(user_info):
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
         with col2:
+            
+            #GRÁFICO PARA MOSTRAR LIQUIDADO POR EQUIPE
+            LiqPorEquipe=DfEqpFiltro.query("@DfEqpFiltro['REPORTE']!='MARCOS'")
+            LiqPorEquipe=LiqPorEquipe.groupby(['REPORTE'],as_index=False).agg({'valor_liquidado':'sum'}).sort_values(by='valor_liquidado',ascending=False)
+            # LiqPorEquipe=LiqPorEquipe.query("@LiqPorEquipe['REPORTE']!='MARCOS'")
+            # LiqPorEquipe=LiqPorEquipe.loc[LiqPorEquipe['REPORTE']!='MARCOS']
+            # LiqPorEquipe['Liquidação Acumulada']=LiqPorEquipe.groupby('colaborador')['valor_liquidado'].cumsum()
+            # with st.container(border=True):
+            # Função para formatar números em formato curto
+            
+            def format_number_short(value):
+                if value >= 1_000_000:
+                    return f'{value / 1_000_000:.1f}M'
+                elif value >= 1_000:
+                    return f'{value / 1_000:.1f}k'
+                else:
+                    return str(value)
+
+            x = LiqPorEquipe['REPORTE']
+            y = LiqPorEquipe['valor_liquidado']
+            labels = [format_number_short(value) for value in y]
+            # linha_meta = np.full(len(x), MetaLiq)
+
+            # # x2 = LiqPordiaOn['data_liquidacao']
+            # # y2 = LiqPordiaOn['Liquidação Acumulada']
+            # # labels = [format_number_short(value) for value in y]
+
+            # Criação dos traços do gráfico
+            data = [
+                go.Bar(x=x, y=y, name="Liquidado Equipe"),
+            ]
+            
+            # Layout do gráfico
+            layout = go.Layout(
+                title="Liquidação Por Equipe",
+                height=350,
+                margin=dict(l=60, r=20, t=80, b=60),
+                plot_bgcolor="rgba(128,128,128,0.1)",
+                paper_bgcolor="rgba(128,128,128,0.1)",
+                showlegend=False,
+            )
+
+            #Gráfico de área
+            fig = go.Figure(data=data, layout=layout)
+
+            # # Adicione anotações para os rótulos de dados
+            for i, txt in enumerate(y):
+                fig.add_annotation(
+                    print(y.index),
+                    x=x[i],
+                    y=y[i],
+                    text=str(format_number_short(txt)), 
+                    showarrow=False,
+                    textangle=-70,
+                    xanchor='center',
+                    yanchor='bottom',
+                    # yshift=35,
+                    font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                )
+
+            st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+        
+        col1,col2=st.columns([6,3])
+        with col1:
             #GRÁFICO PARA MOSTRAR LIQUIDADO ACUMULADO POR DIA
-            LiqPordiaGer=BaseLiq.query("@BaseLiq['colaborador']!='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordiaGer=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
             LiqPordiaGer['Liquidação Acumulada']=LiqPordiaGer['valor_liquidado'].cumsum()
-            LiqPordiaOn=BaseLiq.query("@BaseLiq['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordiaOn=DfEqpFiltro.query("@DfEqpFiltro['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
             LiqPordiaOn['Liquidação Acumulada']=LiqPordiaOn['valor_liquidado'].cumsum()
             # with st.container(border=True):
             # Função para formatar números em formato curto
+
             def format_number_short(value):
                 if value >= 1_000_000:
                     return f'{value / 1_000_000:.1f}M'
@@ -483,48 +548,50 @@ def run(user_info):
                 margin=dict(l=60, r=20, t=80, b=60),
                 plot_bgcolor="rgba(128,128,128,0.1)",
                 paper_bgcolor="rgba(128,128,128,0.1)",
-                showlegend=False,
-                barmode='stack'
+                showlegend=True,
+                barmode='stack',
             )
 
             #Gráfico de área
             fig = go.Figure(data=data, layout=layout)
 
-            # Adicione anotações para os rótulos de dados
-            for i, txt in enumerate(y+y2):
-                fig.add_annotation(
-                    x=x2[i],
-                    y=y[i]+y2[i],
-                    text=str(format_number_short(txt)), 
-                    showarrow=False,
-                    textangle=-70,
-                    xanchor='center',
-                    yanchor='top',
-                    yshift=35,
-                    font=dict(size=12, color="rgba(255,250,250, 0.5)")
-                )
-            # for i, txt in enumerate(y):
-            #     fig.add_annotation(
-            #         x=x[i],
-            #         y=y[i],
-            #         text=str(format_number_short(txt)), 
-            #         showarrow=False,
-            #         textangle=-70,
-            #         xanchor='center',
-            #         yanchor='bottom',
-            #         font=dict(size=12, color="rgba(255,250,250, 0.5)")
-            #     )
-            #Linha de meta
+            try:
+                # Adicione anotações para os rótulos de dados
+                for i, txt in enumerate(y+y2):
+                    fig.add_annotation(
+                        x=x2[i],
+                        y=y[i]+y2[i],
+                        text=str(format_number_short(txt)), 
+                        showarrow=False,
+                        textangle=-70,
+                        xanchor='center',
+                        yanchor='top',
+                        yshift=35,
+                        font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                    )
+            except:              
+                for i, txt in enumerate(y):
+                    fig.add_annotation(
+                        x=x[i],
+                        y=y[i],
+                        text=str(format_number_short(txt)), 
+                        showarrow=False,
+                        textangle=-70,
+                        xanchor='center',
+                        yanchor='top',
+                        yshift=35,
+                        font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                    )
             fig.add_trace(go.Scatter(x=x, y=linha_meta,mode='lines',
             line=dict(color='Red', width=2, dash='dashdot'),
             opacity=0.5,
-            name='Meta Diaria'),
+            name='Meta'),
             )
 
             fig.add_annotation(
                 x=x.iloc[0],
                 y=MetaLiq,
-                text=f"{MetaLiq:,.0f} Meta".replace(",","."),
+                text=f"{MetaLiq:,.0f}".replace(",","."),
                 showarrow=False,
                 yshift=10,
                 font=dict(
@@ -534,152 +601,25 @@ def run(user_info):
             )
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+        with col2:
+            labels = ['Liquidado','A_Liquidar']
+            values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliq['Valor Original'].sum()]
 
-            # # Seu código para criar o gráfico
-            # fig, ax = plt.subplots(figsize=(25  , 27))  # Ajuste os valores conforme necessário
-            # colabs = grafCobGeral['Nome_Colaborador']
-            # y_pos = range(len(colabs))
-            # performance = grafCobGeral['Valor Liquidado']
-
-            # bars=ax.barh(y_pos, performance, align='center')
-
-            # for bar, val in zip(bars, performance):
-            #     val=float(val)
-            #     meta=float(meta)
-            #     ax.text(bar.get_x() + bar.get_width(), bar.get_y() + bar.get_height() / 2, 
-            #         f'{(val/meta)*100:,.2f}%'.replace(',', '.'), color='white', fontweight='bold', fontsize=20, va='center')
-
-            # ax.vlines(x=meta, ymin=-1.5, ymax=len(colabs), color='red', linestyle='--', label='Meta')
-            # ax.text(meta, -1.5, f'Meta: {meta:,.0f}'.replace(',', '.'), color='red', fontsize=30, ha='right')
-
-            # ax.set_yticks(y_pos)
-            # ax.set_yticklabels(colabs, color="white", fontsize=20,fontweight='bold')
-            # ax.invert_yaxis()
-            # ax.set_xlabel('Valor Liquidado')
-            # ax.set_title('Liquidado por Colaborador')
-            # ax.spines['top'].set_visible(False)
-            # ax.spines['left'].set_visible(False)
-            # ax.spines['right'].set_visible(False)
-            # ax.set_facecolor(color="none")
-            # fig.patch.set_alpha(0)
+            # Use `hole` to create a donut-like pie chart
+            fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
+            st.plotly_chart(fig, use_container_width=True)
             
-            # # Ajuste a largura da figura para acomodar os nomes completos
-            # fig.tight_layout()
+    with tab2:        
+        # Carrega a imagem
+        pass
+        # image = Image.open("imagem_meta.jpg")
+        # draw = ImageDraw.Draw(image)
 
-            # # Salvar a figura como BytesIO
-            # image_stream = BytesIO()
-            # fig.savefig(image_stream, format="png")
-            # image_stream.seek(0)  # Voltar ao início do stream
+        # # Desenha anotações (exemplo: um círculo e texto)
+        # draw.ellipse((100, 100, 200, 200), outline="red", width=2)
+        # font = ImageFont.truetype("arial.ttf", 24)  # Use uma fonte disponível
+        # draw.text((120, 150), "Anotação", fill="red", font=font)
 
-            # # Exibir a imagem sem use_container_width
-            # st.image(image_stream)
-
-            # with st.container(border=True,height=750):
-
-            # cobranca_geral=cobranca_geral.merge(aliqcolabs,left_on='Nome_Colaborador',right_on='Criado Por',how='left')
-            # metaDiaria=round(float(meta)/dias_uteis)
-            # diasPassados=(dias_uteis-dias_uteis_falta)
-            # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
-            # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
-            # mes=dt.datetime.now().month
-            # if len(cobranca_geral[cobranca_geral['A Receber'].isna()])==len(cobranca_geral) or mesNum < mes:
-            #     cobranca_geral['A Receber']=0
-            # try:
-            #     agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','Nome_Colaborador','A Receber'], values='Valor Liquidado', aggfunc='sum').reset_index().sort_values(by='Valor Liquidado',ascending=False)
-
-            # except:
-                
-            #     agroupTab=cobranca_geral[['RANK','REPORTE','Nome_Colaborador','Valor Liquidado','A Receber']]
-            #     print(agroupTab['A Receber'], 'Baixo')
-
-            # agroupTab['% Atingido Meta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{x/meta*100:.2f}%")
-
-            # # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
-
-            # agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
-
-            # if diasPassados ==0:
-            #     diasPassados=1
-
-            # agroupTab['Realizado por Dia (Média)'] = (agroupTab['Valor Liquidado']-media_por_colaborador_dia['Valor Liquidado'])/(diasPassados-1)
-            # agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))        
-            # agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-            # agroupTab['Realizado Total']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-            # agroupTab['Falta']=agroupTab['Valor Liquidado'].apply(lambda x: f"R${x-meta:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-
-            # agroupTab['% Falta']=agroupTab['Valor Liquidado'].apply(lambda x:f"{(x/meta*100)-100:.2f}%")
-            
-            # agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
-            # agroupTab['Receber']=agroupTab['A Receber'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-            # # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
-            # # Função para verificar se a meta foi batida
-            # def verificar_meta(row):
-            #     if row['Valor Liquidado'] >= meta:
-            #         return 'Meta Batida'
-            #     elif (row['Valor Liquidado']+ row['A Receber']) >= meta:
-            #         return 'Pode Bater Meta'
-            #     elif (row['Valor Liquidado']+ row['A Receber']+(dias_uteis_falta*metaDiaria)) >= meta:
-            #         return 'Chance de bater a meta'
-            #     else:
-            #         return 'Não irá bater Meta'
-                
-            # agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
-
-
-            # agroupTab=agroupTab[['RANK','REPORTE','Nome_Colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
-            
-            # # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
-            # def color_text(value):
-            #     if value == 'Meta Batida':
-            #         color = 'blue'
-            #     elif value == 'Pode Bater Meta':
-            #         color = 'lightblue'
-            #     elif value == 'Chance de bater a meta':
-            #         color = 'orange'
-            #     elif value == 'Não irá bater Meta':
-            #         color = 'red'
-            #     else:
-            #         color = 'black'  # Cor padrão para outros valores
-            #     return f'color: {color};'
-
-            # # agroupTab.set_index('RANK', inplace=True)
-            # # Aplicando a formatação condicional à coluna 'Resultado'
-            # styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
-
-            # # Converte o DataFrame para HTML
-            # # Converte o DataFrame para HTML, removendo o índice
-            
-            # # html_table = styled_df.to_html()
-            # # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
-
-            # # components.html(
-            # #     f"""
-            # #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-            # #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-            # #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
-
-            # #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
-            # #     """,
-            # #     height=800,
-            # # )
-            # # st.components.v1.html(html_table, height=500, scrolling=True)
-            # # st.markdown(html_table, unsafe_allow_html=True)
-            # # st.markdown(html_table_bot, unsafe_allow_html=True)
-            # st.dataframe(styled_df, hide_index=True, height=800, width=1100,use_container_width=True)
-            with col2:
-                pass
-        with tab2:        
-            # Carrega a imagem
-            image = Image.open("imagem_meta.jpg")
-            draw = ImageDraw.Draw(image)
-
-            # Desenha anotações (exemplo: um círculo e texto)
-            draw.ellipse((100, 100, 200, 200), outline="red", width=2)
-            font = ImageFont.truetype("arial.ttf", 24)  # Use uma fonte disponível
-            draw.text((120, 150), "Anotação", fill="red", font=font)
-
-            # Exibe a imagem no Streamlit
-            st.image(image, caption="Imagem com Anotações")
+        # # Exibe a imagem no Streamlit
+        # st.image(image, caption="Imagem com Anotações")
 
