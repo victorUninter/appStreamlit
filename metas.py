@@ -18,6 +18,8 @@ from PIL import Image, ImageDraw, ImageFont
 from classe import DbManager
 from sqlalchemy import create_engine, text, select,MetaData # Corrigido
 import mysql.connector
+import io
+
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
@@ -177,28 +179,26 @@ def run(user_info):
             st.experimental_rerun()
       
         BaseLiq=import_bases('view_CobrancaGeral',mesNum,coluna='data_liquidacao')
-        BaseAliq=import_bases('Areceber',mes=mesNum)
+        BaseAliq=import_bases('view_receberCompleta')
         
         BaseLiq=BaseLiq.drop_duplicates()
         
         try:
-            BaseAliq['Valor Original']=BaseAliq['Valor Original'].str.replace(",",".").astype(float)
+            BaseAliq['Valor_Atualizado']=BaseAliq['Valor_Atualizado'].str.replace(",",".").astype(float)
         except:
             pass
         
-        BaseAliq['Data Vencimento']=pd.to_datetime(BaseAliq['Data Vencimento'],dayfirst=True)
+        BaseAliq['Data_Vencimento']=pd.to_datetime(BaseAliq['Data_Vencimento'],dayfirst=True)
 
-        aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
+        # aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
 
-        aliqcolabs=aliqcolabs.groupby('Criado Por',as_index=False)['Valor Original'].sum()
-
-        aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
+        # aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
         
-        BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
+        # BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
 
-        BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
+        # BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
 
-        BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
+        # BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
         
         LiquidadoEquipeMerge=BaseLiq.groupby('colaborador',as_index=False).agg({'valor_liquidado':'sum','EQUIPE':'first', 'REPORTE':'first'})
 
@@ -244,21 +244,20 @@ def run(user_info):
         
         totalLiq=DfEqpFiltro['valor_liquidado'].sum()
 
-        aLiquidar=BaseAliqMetas['A Receber'].sum()
-        
-        LiqPordia=DfEqpFiltro.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+        aLiquidar=BaseAliq['Valor_Atualizado'].sum()
 
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
         # Dados de exemplo: datas e valores de liquidação diária
 
-        # Calcula a liquidação acumulada
-        LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
-        
+        BaseAliqEquipe=BaseAliq.loc[(BaseAliq['EQUIPE']==optionsEqp)]
+        aLiquidar=BaseAliq['Valor_Atualizado'].sum()
+
     if optionsEqp=='Telecobrança':
         MetaLiq=MetaTele
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
+
     def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=250,height=160):
 
         # Função para converter imagem local em base64
@@ -330,7 +329,10 @@ def run(user_info):
         )
         return metrica
 
-    tab1, tab2 = st.tabs(["Home", "Tele"])
+    if user_info[2]=="ADMIN":
+        tab1, tab2,tab3 = st.tabs(["Home", "Equipe","Adm. Equipe"])
+    else:
+        tab1, tab2 = st.tabs(["Home", "Equipe"])
 
     with tab1:
         col1, col2, col3, col4,col5,col6= st.columns([2,2,2,2,2,2])
@@ -382,6 +384,11 @@ def run(user_info):
             # with st.container(border=True): 
             #     st.metric(label="Déficit/Superávit", value=f"R${valorDefSup:,.0f}".replace(',', '.'),delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}")
         with col6:
+
+            # Calcula a liquidação acumulada
+            LiqPordia=DfEqpFiltro.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
+
             Delta=(aLiquidar/MetaLiq)*100
             label=f"A Liquidar".replace(',', '.')
             criaImagem(f"R${aLiquidar:,.0f}",f"{Delta:.2f}%",label,"fundoAzul.jpeg",b=20)
@@ -603,16 +610,229 @@ def run(user_info):
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
         with col2:
             labels = ['Liquidado','A_Liquidar']
-            values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliq['Valor Original'].sum()]
+            values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliqEquipe['Valor_Original'].sum()]
 
             # Use `hole` to create a donut-like pie chart
             fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
             st.plotly_chart(fig, use_container_width=True)
             
-    with tab2:        
-        # Carrega a imagem
-        pass
-        # image = Image.open("imagem_meta.jpg")
+    with tab2:
+        col1,col2,col3=st.columns([3,4,1])
+        
+        with col1:
+            liqColab=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online'").groupby(['colaborador'],as_index=False).agg({'valor_liquidado':'sum'}).sort_values(by='valor_liquidado',ascending=False)
+            receberColab=BaseAliqEquipe.query("@BaseAliqEquipe['Criado_Por']!='Acordo Online' and @BaseAliqEquipe['CARGO']=='ASSISTENTE'").groupby(['Criado_Por'],as_index=False).agg({'Valor_Original':'sum'})
+            # Carrega a imagem
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                y=liqColab['colaborador'],
+                x=liqColab['valor_liquidado'],
+                orientation='h',
+                name="Liquidado",
+                marker=dict(
+                    color='rgba(246, 78, 139, 0.6)',
+                    line=dict(color='rgba(246, 78, 139, 1.0)', width=2)
+                )
+            ))
+            fig.add_trace(go.Bar(
+                y=receberColab['Criado_Por'],
+                x=receberColab['Valor_Original'],
+                orientation='h',
+                name="A_Liquidar",
+                marker=dict(
+                    color='rgba(58, 71, 80, 0.6)',
+                    line=dict(color='rgba(58, 71, 80, 1.0)', width=2)
+                )
+            ))
+
+            fig.update_layout(barmode='stack')
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    if user_info[2]=="ADMIN":
+        with tab3:
+            def inserir_dados(Ru, nome,email, cargo,avancado, equipe,matricula=None,img_byte_arr=None):
+                try:
+                    conn = connect()
+                    cursor = conn.cursor()
+                    sql = "INSERT INTO sua_tabela (ru, matricula, nome, email, cargo, avancado, equipe, foto) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                    val = (Ru, matricula, nome, email, cargo, avancado, equipe, img_byte_arr)
+                    cursor.execute(sql, val)
+                    conn.commit()
+                    st.success("Dados inseridos com sucesso!")
+                except Exception as e:
+                    st.error(f"Erro ao inserir dados: {e}")
+                finally:
+                    conn.close()
+
+            col1,col3 =st.columns([4,4])
+
+            with col1:
+                st.title("Cadastro de Colaborador")
+
+                # Formulário
+                with st.form(key="form_cadastro"):
+                    col1, col2 = st.columns(2)  # Divide o formulário em duas colunas
+
+                    with col1:
+                        Ru = st.text_input("RU")
+                        matricula = st.text_input("Matrícula")
+                        nome = st.text_input("Nome Colaborador")
+                        email = st.text_input("E-mail")
+                        cargo = st.selectbox("Cargo", ['ADVOGADO', 'ANALISTA', 'ASSISTENTE', 'ASSISTENTE_TELE', 'AVANÇADO', 'AVANÇADO TELE', 'GESTOR', 'MONITOR'])
+                        avancado = st.selectbox('Responsável', Reporte)
+                        equipe = st.selectbox('Equipe', Equipe)
+
+                    with col2:
+                        uploaded_file = st.file_uploader("Escolha uma imagem...", type=["jpg", "jpeg", "png"])
+                        if uploaded_file is not None:
+                            image = Image.open(uploaded_file)
+                            # Redimensionando a imagem (opcional)
+                                        # Pré-visualização da imagem
+                            max_width = 300  # Largura máxima para a foto do perfil
+                            max_height = 300  # Altura máxima para a foto do perfil
+                            image.thumbnail((max_width, max_height))
+                            st.image(image, caption='Imagem Redimensionada', use_column_width=True)
+
+                    if st.form_submit_button("Cadastrar"):
+                        # Convertendo a imagem para BLOB (se houver imagem)
+                        img_byte_arr = None
+                        if uploaded_file:
+                            img_byte_arr = io.BytesIO()
+                            image.save(img_byte_arr, format=image.format)
+                            img_byte_arr = img_byte_arr.getvalue()
+
+                        inserir_dados(Ru, nome,email, cargo,avancado, equipe,matricula,img_byte_arr)  # Passa a imagem como argumento
+            with col3:
+                st.title("Atualizar Colaborador")
+                def atualizar_registros(conn, df_original, df_editado):
+                    cursor = conn.cursor()
+
+                    # Iterar sobre os registros e comparar os dados editados com os dados originais
+                    for index, row_editado in df_editado.iterrows():
+                        row_original = df_original.loc[index]
+                        if not row_editado.equals(row_original):
+                            
+                            # Se os dados editados forem diferentes dos dados originais, atualizar o registro no banco de dados
+                            sql1 = f"""
+                            UPDATE Equipe_Completa
+                            SET SIT_ATUAL = %s
+                            WHERE RU = %s  -- Substitua "RU" pela chave primária da sua tabela
+                            """
+                            values = (row_editado['SIT_ATUAL'], row_editado['RU'])  # Ajuste conforme suas colunas
+                            cursor.execute(sql1, values)
+                            conn.commit()
+
+                            sql2 = f"""
+                            UPDATE Equipe_Completa
+                            SET DATA_RETORNO = %s
+                            WHERE RU = %s  -- Substitua "RU" pela chave primária da sua tabela
+                            """
+                            values = (row_editado['DATA_RETORNO'], row_editado['RU'])  # Ajuste conforme suas colunas
+                            cursor.execute(sql2, values)
+                            conn.commit()
+
+                            sql3 = f"""
+                            UPDATE Equipe_Completa
+                            SET CARGO = %s
+                            WHERE RU = %s  -- Substitua "RU" pela chave primária da sua tabela
+                            """
+                            values = (row_editado['CARGO'], row_editado['RU'])  # Ajuste conforme suas colunas
+                            cursor.execute(sql3, values)
+                            conn.commit()
+
+                            sql4 = f"""
+                            UPDATE Equipe_Completa
+                            SET REPORTE = %s
+                            WHERE RU = %s  -- Substitua "RU" pela chave primária da sua tabela
+                            """
+                            values = (row_editado['REPORTE'], row_editado['RU'])  # Ajuste conforme suas colunas
+                            cursor.execute(sql4, values)
+                            conn.commit()
+
+                            sql5 = f"""
+                            UPDATE Equipe_Completa
+                            SET EQUIPE = %s
+                            WHERE RU = %s  -- Substitua "RU" pela chave primária da sua tabela
+                            """
+                            values = (row_editado['EQUIPE'], row_editado['RU'])  # Ajuste conforme suas colunas
+                            cursor.execute(sql5, values)
+                            conn.commit()
+
+                # Função para carregar os dados do banco de dados
+                def load_data(conn):
+                    query = 'SELECT RU,MATRICULA, Nome_Colaborador, CARGO, REPORTE, EQUIPE, SIT_ATUAL, DATA_RETORNO,ANIVERSARIO,EMAIL FROM Equipe_Completa'
+                    return pd.read_sql(query, conn)
+
+                # Função principal
+                def run():
+                    # Conectar ao banco de dados
+                    conn = connect()
+
+                    # Carregar dados do banco de dados
+                    baseCompleta = load_data(conn)
+
+                    Situacao=['ATIVO','ATESTADO','FÉRIAS','FOLGA','FOLGA_ANIVERSÁRIO','AFASTADO','FALTOU','INATIVO','TREINAMENTO']
+                    Situacao.insert(0,'TODOS')
+                    Equipe=list(baseCompleta['EQUIPE'].unique())
+                    Equipe.insert(0,'TODOS')
+                    Reporte=list(baseCompleta['REPORTE'].unique())
+                    Reporte.insert(0,'TODOS')
+                    # Exibir barra lateral para seleção de filtros
+                    if tab3.select:
+                        optionsSit = st.sidebar.selectbox('Selecione a Situação desejada', Situacao)
+
+                        # Filtrar dados conforme seleção
+                        DfEqpFiltro = baseCompleta.copy()
+                        if optionsSit != 'TODOS':
+                            DfEqpFiltro = DfEqpFiltro[DfEqpFiltro['SIT_ATUAL'] == optionsSit]
+                        if optionsEqp != 'TODOS':
+                            DfEqpFiltro = DfEqpFiltro[DfEqpFiltro['EQUIPE'] == optionsEqp]
+                        if optionsRpt != 'TODOS':
+                            DfEqpFiltro = DfEqpFiltro[DfEqpFiltro['REPORTE'] == optionsRpt]
+                    
+                        qtdeColabs=len(DfEqpFiltro)
+
+                        DfEqpFiltro = DfEqpFiltro.query("SIT_ATUAL != 'INATIVO'")
+                        qtdAtivos = len(DfEqpFiltro[DfEqpFiltro['SIT_ATUAL'] == 'ATIVO'])
+                        dif = qtdAtivos - qtdeColabs
+                        total_colab_metric = st.sidebar.metric("Total de Colaboradores", qtdeColabs, dif)
+                        ativos_metric = st.sidebar.metric("Ativos", value=qtdAtivos)
+
+                        # col1,col2,col3=st.columns([2,7,1])
+                        # with col2:
+                        with st.container(height=660):
+                            edited_df=st.data_editor(DfEqpFiltro[['RU','Nome_Colaborador','CARGO','REPORTE','EQUIPE','SIT_ATUAL','DATA_RETORNO']],
+                                                        hide_index=True,
+                                                        column_config={
+                                                            "SIT_ATUAL": st.column_config.SelectboxColumn(
+                                                                "SIT. ATUAL",
+                                                                help="Situação do Colaborador",
+                                                                width="900px",
+                                                                options=Situacao[1:],
+                                                                required=True,
+                                                            )        
+                                                        },height=550
+
+                                                        )
+                        
+                            atualizar = st.button('ATUALIZAR',type="primary")
+
+                        if atualizar and len(edited_df)>0:
+                            # Carregar dados originais novamente
+                            baseCompleta_original = load_data(conn)
+
+                            # Atualizar registros modificados
+                            atualizar_registros(conn, baseCompleta_original, edited_df)
+
+                            # Fechar conexão
+                            conn.close()
+                            st.success('Atualizado com sucesso!', icon="✅")
+                    else:
+                        pass
+                run()
+    else:
+        pass    # image = Image.open("imagem_meta.jpg")
         # draw = ImageDraw.Draw(image)
 
         # # Desenha anotações (exemplo: um círculo e texto)
