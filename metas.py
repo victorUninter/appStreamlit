@@ -190,6 +190,7 @@ def run(user_info):
         
         BaseAliq['Data_Vencimento']=pd.to_datetime(BaseAliq['Data_Vencimento'],dayfirst=True)
 
+
         # aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
 
         # aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
@@ -257,6 +258,7 @@ def run(user_info):
         MetaLiq=MetaTele
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
+        Metaindividual=MetaindividualTele
 
     def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=250,height=160):
 
@@ -409,7 +411,7 @@ def run(user_info):
                 
             x = LiqPordia['data_liquidacao']
             y = LiqPordia['valor_liquidado']
-
+            
             labels = [format_number_short(value) for value in y]
             linha_meta = np.full(len(x), metaDia)
             
@@ -476,9 +478,9 @@ def run(user_info):
             labels = [format_number_short(value) for value in y]
             # linha_meta = np.full(len(x), MetaLiq)
 
-            # # x2 = LiqPordiaOn['data_liquidacao']
-            # # y2 = LiqPordiaOn['Liquidação Acumulada']
-            # # labels = [format_number_short(value) for value in y]
+            # x2 = LiqPordiaOn['data_liquidacao']
+            # y2 = LiqPordiaOn['Liquidação Acumulada']
+            # labels = [format_number_short(value) for value in y]
 
             # Criação dos traços do gráfico
             data = [
@@ -516,11 +518,12 @@ def run(user_info):
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
         
         col1,col2=st.columns([6,3])
+
         with col1:
             #GRÁFICO PARA MOSTRAR LIQUIDADO ACUMULADO POR DIA
             LiqPordiaGer=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
             LiqPordiaGer['Liquidação Acumulada']=LiqPordiaGer['valor_liquidado'].cumsum()
-            LiqPordiaOn=DfEqpFiltro.query("@DfEqpFiltro['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordiaOn=BaseLiq.query("@BaseLiq['colaborador']=='Acordo Online'").groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
             LiqPordiaOn['Liquidação Acumulada']=LiqPordiaOn['valor_liquidado'].cumsum()
             # with st.container(border=True):
             # Função para formatar números em formato curto
@@ -536,11 +539,12 @@ def run(user_info):
             x = LiqPordiaGer['data_liquidacao']
             y = LiqPordiaGer['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
-            linha_meta = np.full(len(x), MetaLiq)
+            linha_meta = np.full(len(x), metaDia)
 
             x2 = LiqPordiaOn['data_liquidacao']
             y2 = LiqPordiaOn['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
+
 
             # Criação dos traços do gráfico
             data = [
@@ -558,6 +562,8 @@ def run(user_info):
                 showlegend=True,
                 barmode='stack',
             )
+
+            # st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
 
             #Gráfico de área
             fig = go.Figure(data=data, layout=layout)
@@ -608,35 +614,42 @@ def run(user_info):
             )
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+
         with col2:
             labels = ['Liquidado','A_Liquidar']
             values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliqEquipe['Valor_Original'].sum()]
 
             # Use `hole` to create a donut-like pie chart
             fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
+
             st.plotly_chart(fig, use_container_width=True)
             
     with tab2:
         col1,col2,col3=st.columns([3,4,1])
         
         with col1:
-            liqColab=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online'").groupby(['colaborador'],as_index=False).agg({'valor_liquidado':'sum'}).sort_values(by='valor_liquidado',ascending=False)
+            liqColab=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online' and @BaseAliqEquipe['CARGO']=='ASSISTENTE' and @BaseAliqEquipe['SIT_ATUAL']!='INATIVO'").groupby(['colaborador'],as_index=False).agg({'valor_liquidado':'sum'})
+
             receberColab=BaseAliqEquipe.query("@BaseAliqEquipe['Criado_Por']!='Acordo Online' and @BaseAliqEquipe['CARGO']=='ASSISTENTE'").groupby(['Criado_Por'],as_index=False).agg({'Valor_Original':'sum'})
+
+            liqEquipeMerge=liqColab.merge(receberColab,left_on='colaborador',right_on='Criado_Por',how='left').sort_values(by='valor_liquidado',ascending=True)
+            st.dataframe(liqEquipeMerge)
+            linha_meta = np.full(len(x), Metaindividual)
             # Carrega a imagem
             fig = go.Figure()
             fig.add_trace(go.Bar(
-                y=liqColab['colaborador'],
-                x=liqColab['valor_liquidado'],
+                y=liqEquipeMerge['colaborador'],
+                x=liqEquipeMerge['valor_liquidado'],
                 orientation='h',
                 name="Liquidado",
                 marker=dict(
-                    color='rgba(246, 78, 139, 0.6)',
-                    line=dict(color='rgba(246, 78, 139, 1.0)', width=2)
+                    color='rgba(0,0,255, 0.6)',
+                    line=dict(color='rgba(0,0,255, 1.0)', width=2)
                 )
             ))
             fig.add_trace(go.Bar(
-                y=receberColab['Criado_Por'],
-                x=receberColab['Valor_Original'],
+                y=liqEquipeMerge['colaborador'],
+                x=liqEquipeMerge['Valor_Original'],
                 orientation='h',
                 name="A_Liquidar",
                 marker=dict(
@@ -645,10 +658,140 @@ def run(user_info):
                 )
             ))
 
-            fig.update_layout(barmode='stack')
+            fig.update_layout(barmode='stack',height=900,
+                              width=1200,
+                              margin=dict(l=50, r=50, t=100, b=100),
+                              shapes=[
+                                    dict(
+                                        type='line',
+                                        yref='paper', y0=0, y1=1,  
+                                        xref='x', x0=Metaindividual, x1=Metaindividual,
+                                        line=dict(color="Red", width=2, dash="dash")
+                                    )
+                                ],
+                                annotations=[
+                                            dict(
+                                                x=Metaindividual,
+                                                y=1.00,  # Ajuste a posição vertical da anotação
+                                                xref="x",
+                                                yref="paper",
+                                                text=f"Meta: {float(Metaindividual):.2f}",  # Texto da anotação
+                                                showarrow=True,
+                                                arrowhead=7,
+                                                ax=0,
+                                                ay=-40  # Ajuste o comprimento da seta
+                                            )
+            ])
 
             st.plotly_chart(fig, use_container_width=True)
+        with col2:
 
+            cobranca_geral=DfEqpFiltro.merge(BaseAliqEquipe,left_on='colaborador',right_on='Criado_Por',how='left')
+
+            metaDiaria=metaDia
+            diasPassados=(dias_uteis-dias_uteis_falta)
+
+            cobranca_geral['valorPcolab']=cobranca_geral.groupby('colaborador')['valor_liquidado'].transform(sum)
+
+            cobranca_geral['RANK'] = cobranca_geral['valorPcolab'].rank(method='dense', ascending=False).astype(int)
+            # st.dataframe(cobranca_geral)
+
+            # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
+            # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
+            mes=dt.datetime.now().month
+            if len(cobranca_geral[cobranca_geral['Valor_Original'].isna()])==len(cobranca_geral) or mesNum < mes:
+                cobranca_geral['Valor_Original']=0
+            try:
+                agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','colaborador','Valor_Original'], values='valor_liquidado', aggfunc='sum').reset_index().sort_values(by='valor_liquidado',ascending=False)
+
+            except:
+                
+                agroupTab=cobranca_geral[['RANK','REPORTE','colaborador','valor_liquidado','Valor_Original']]
+                print(agroupTab['Valor_Original'], 'Baixo')
+
+            agroupTab['% Atingido Meta']=agroupTab['valor_liquidado'].apply(lambda x:f"{x/Metaindividual*100:.2f}%")
+
+            # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
+
+            agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
+
+            if diasPassados ==0:
+                diasPassados=1
+
+            dados_dias_anteriores = liqEquipeMerge[liqEquipeMerge['data_liquidacao'].dt.day < diaHj]
+
+            media_por_colaborador_dia = dados_dias_anteriores.groupby('colaborador',as_index=False)['valor_liquidado'].mean()
+    
+            agroupTab['Realizado por Dia (Média)'] = (agroupTab['valor_liquidado']-media_por_colaborador_dia['valor_liquidado'])/(diasPassados-1)
+
+            agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))  
+
+            agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            agroupTab['Realizado Total']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            agroupTab['Falta']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x-Metaindividual:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            agroupTab['% Falta']=agroupTab['valor_liquidado'].apply(lambda x:f"{(x/Metaindividual*100)-100:.2f}%")
+            
+            agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
+
+            agroupTab['Receber']=agroupTab['Valor_Original'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
+            # Função para verificar se a meta foi batida
+            def verificar_meta(row):
+                if row['valor_liquidado'] >= Metaindividual:
+                    return 'Meta Batida'
+                elif (row['valor_liquidado']+ row['Valor_Original']) >= Metaindividual:
+                    return 'Pode Bater Meta'
+                elif (row['valor_liquidado']+ row['Valor_Original']+(dias_uteis_falta*metaDiaria)) >= Metaindividual:
+                    return 'Chance de bater a meta'
+                else:
+                    return 'Não irá bater Meta'
+                
+            agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
+
+
+            agroupTab=agroupTab[['RANK','REPORTE','colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
+            
+            # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
+            def color_text(value):
+                if value == 'Meta Batida':
+                    color = 'blue'
+                elif value == 'Pode Bater Meta':
+                    color = 'lightblue'
+                elif value == 'Chance de bater a meta':
+                    color = 'orange'
+                elif value == 'Não irá bater Meta':
+                    color = 'red'
+                else:
+                    color = 'black'  # Cor padrão para outros valores
+                return f'color: {color};'
+
+            # agroupTab.set_index('RANK', inplace=True)
+            # Aplicando a formatação condicional à coluna 'Resultado'
+            styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
+
+            # Converte o DataFrame para HTML
+            # Converte o DataFrame para HTML, removendo o índice
+            
+            # html_table = styled_df.to_html()
+            # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
+
+            # components.html(
+            #     f"""
+            #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+            #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+            #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+            #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
+            #     """,
+            #     height=800,
+            # )
+            # st.components.v1.html(html_table, height=500, scrolling=True)
+            # st.markdown(html_table, unsafe_allow_html=True)
+            # st.markdown(html_table_bot, unsafe_allow_html=True)
+            st.dataframe(styled_df, hide_index=True, height=800, width=1100,use_container_width=True)
     if user_info[2]=="ADMIN":
         with tab3:
             def inserir_dados(Ru, nome,email, cargo,avancado, equipe,matricula=None,img_byte_arr=None):
