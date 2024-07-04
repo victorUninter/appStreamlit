@@ -19,6 +19,7 @@ from classe import DbManager
 from sqlalchemy import create_engine, text, select,MetaData # Corrigido
 import mysql.connector
 import io
+import plotly.express as px
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -145,7 +146,13 @@ def run(user_info):
     # col1, col2,col3,col4,col5,col6,col7,col8, = st.columns([3,3,5,5,5,5,5,5])
 
     with st.sidebar:
+        if st.button("Logout"):
+            st.session_state.authenticated = False
+            del st.session_state.user_info 
+            st.experimental_rerun()
+
         st.write(f"Última Atualização - Data:{atualizacaoData} Hora:{atualizacaoHora} ")
+
         meses={i:j for j,i in enumerate(calendar.month_abbr)}
         mesLiq = st.selectbox(
         'Mês',list(meses.keys())[1:])
@@ -153,6 +160,7 @@ def run(user_info):
 
         anoInicio=2024
         anoFim=anoInicio+20
+
         anoLiq = st.selectbox(
         'Ano',range(anoInicio,anoFim))
 
@@ -172,15 +180,12 @@ def run(user_info):
         colaborador = st.selectbox(
         'Filtro por Colaborador',
         colaborador)
-        
-        if st.button("Logout"):
-            st.session_state.authenticated = False
-            del st.session_state.user_info 
-            st.experimental_rerun()
       
         BaseLiq=import_bases('view_CobrancaGeral',mesNum,coluna='data_liquidacao')
         BaseAliq=import_bases('view_receberCompleta')
-        
+        metas=import_bases('metas_cobranca_geral')
+        feriadosDF=import_bases('feriados')
+
         BaseLiq=BaseLiq.drop_duplicates()
         
         try:
@@ -189,38 +194,24 @@ def run(user_info):
             pass
         
         BaseAliq['Data_Vencimento']=pd.to_datetime(BaseAliq['Data_Vencimento'],dayfirst=True)
-
-
-        # aliqcolabs=BaseAliq[BaseAliq['Parcela']==1]
-
-        # aliqcolabs=aliqcolabs.rename(columns={'Valor Original':'A Receber'})
         
-        # BaseaLiqmes=BaseAliq[BaseAliq['Data Vencimento'].dt.month==mesNum]
+        # LiquidadoEquipeMerge=BaseLiq.groupby('colaborador',as_index=False).agg({'valor_liquidado':'sum','EQUIPE':'first', 'REPORTE':'first'})
 
-        # BaseAliqMetas=BaseaLiqmes[BaseaLiqmes['Parcela']==1]
+        # LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valor_liquidado',ascending=False)
 
-        # BaseAliqMetas=BaseAliqMetas.rename(columns={'Valor Original':'A Receber'})
-        
-        LiquidadoEquipeMerge=BaseLiq.groupby('colaborador',as_index=False).agg({'valor_liquidado':'sum','EQUIPE':'first', 'REPORTE':'first'})
+        # LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valor_liquidado'].rank(method='dense', ascending=False).astype(int)
 
-        LiquidadoEquipeMerge=LiquidadoEquipeMerge.sort_values(by='valor_liquidado',ascending=False)
-
-        LiquidadoEquipeMerge['RANK'] = LiquidadoEquipeMerge['valor_liquidado'].rank(method='dense', ascending=False).astype(int)
-
-        metas=import_bases('metas_cobranca_geral')
         metas['Mes']=metas['Mês'].dt.month
         metas['Ano']=metas['Mês'].dt.year
         metasFiltro=metas.loc[(metas['Mes']==mesNum) & (metas['Ano']==anoLiq)]
+
         MetaLiq=list(metasFiltro['Meta_geral'])[0]
         MetaTele=list(metasFiltro['Meta_Tele'])[0]
         Metaindividual=list(metasFiltro['Meta_Individual'])[0]
- 
         MetaindividualTele=list(metasFiltro['Meta_Individual_Tele'])[0]
    
         dias_uteis=dias_uteis_no_mes(anoLiq, mesNum)
         dias_uteis_falta=dias_uteis_que_faltam(mesNum)
-
-        feriadosDF=import_bases('feriados')
 
         feriadosDF["Mês"]=feriadosDF["Data"].dt.month
         domingo="Sunday"
@@ -245,14 +236,12 @@ def run(user_info):
         
         totalLiq=DfEqpFiltro['valor_liquidado'].sum()
 
-        aLiquidar=BaseAliq['Valor_Atualizado'].sum()
-
         percentual_falta = (((totalLiq - MetaLiq) / MetaLiq) * 100)
         percentual_atingido=(totalLiq/MetaLiq) * 100
         # Dados de exemplo: datas e valores de liquidação diária
 
         BaseAliqEquipe=BaseAliq.loc[(BaseAliq['EQUIPE']==optionsEqp)]
-        aLiquidar=BaseAliq['Valor_Atualizado'].sum()
+        aLiquidar=BaseAliqEquipe['Valor_Original'].sum()
 
     if optionsEqp=='Telecobrança':
         MetaLiq=MetaTele
@@ -260,7 +249,7 @@ def run(user_info):
         percentual_atingido=(totalLiq/MetaLiq) * 100
         Metaindividual=MetaindividualTele
 
-    def criaImagem(valor,Delta,label,imagem,t=0,r=0,b=0,l=0,width=250,height=160):
+    def criaImagem(valor,label,imagem,Delta=0,t=0,r=0,b=0,l=0,width=250,height=160):
 
         # Função para converter imagem local em base64
         def get_base64_of_bin_file(bin_file):
@@ -341,14 +330,14 @@ def run(user_info):
 
         with col1:
             label="Dias de Trabalho"
-            criaImagem(dias_uteis,f"Faltam {dias_uteis_falta} dias",label,"fundoAzul.jpeg")
+            criaImagem(dias_uteis,label,"fundoAzul.jpeg",f"Faltam {dias_uteis_falta} dias")
                 # st.metric(label="Dias Úteis", value=f"{dias_uteis}",delta=f"-faltam {dias_uteis_falta} dias",delta_color='inverse')            
 
         with col2:
             label="Meta Liquidado"
             M=f"R${MetaLiq:,.0f}".replace(',', '.')
             D=f"{percentual_falta:.2f}% {'' if percentual_falta<0 else 'Meta atingida'}"
-            criaImagem(M,D,label,"fundoAzul.jpeg",b=20)
+            criaImagem(M,label,"fundoAzul.jpeg",D,b=20)
             # st.metric(label="Meta Liquidado", value=f"R${MetaLiq:,.0f}".replace(',', '.'), delta=f"{percentual_falta:.0f}% {'Para atingir meta' if percentual_falta<0 else 'Meta atingida'}")
 
         with col3:
@@ -356,7 +345,7 @@ def run(user_info):
             liq=f"R${totalLiq:,.0f}".replace(',', '.')
             D=f"{percentual_atingido:.0f}%"
             label="Total Liquidado"
-            criaImagem(liq,D,label,"fundoAzul.jpeg",b=20)
+            criaImagem(liq,label,"fundoAzul.jpeg",D,b=20)
             # with st.container(border=True): 
             # criaGrafico(dias,valores,color1,color2,totalLiq,percentual_atingido)
             # st.metric(label=f"Liquidado até {diaHj}", value=f"R${totalLiq:,.0f}".replace(',', '.'),delta=f"{percentual_atingido:.0f}% Atingido Meta")
@@ -368,7 +357,7 @@ def run(user_info):
             defsup=f"{valorDefSup:,.2f}".replace(",",";").replace(".",",").replace(";",".")
             label="Meta Diária"
 
-            criaImagem(f"R${metaDia:,.0f}".replace(',', '.'),f"{deltaMeta}",label,"fundoAzul.jpeg",b=20)
+            criaImagem(f"R${metaDia:,.0f}".replace(',', '.'),label,"fundoAzul.jpeg",f"{deltaMeta}",b=20)
 
             # with st.container(border=True): 
             #     st.metric(label="Meta Diária", value=f"R${metaDia:,.0f}".replace(',', '.'),delta=f"{deltaMeta}")
@@ -381,23 +370,22 @@ def run(user_info):
             label="Déficit/Superávit"
             value=f"R${valorDefSup:,.0f}".replace(',', '.')
             delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}"
-            criaImagem(value,delta,label,"fundoAzul.jpeg",b=20)
+            criaImagem(value,label,"fundoAzul.jpeg",delta,b=20)
 
             # with st.container(border=True): 
             #     st.metric(label="Déficit/Superávit", value=f"R${valorDefSup:,.0f}".replace(',', '.'),delta=f"{'Superávit' if valorDefSup>0 else '-Déficit'}")
         with col6:
 
-            # Calcula a liquidação acumulada
-            LiqPordia=DfEqpFiltro.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
-            LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
-
             Delta=(aLiquidar/MetaLiq)*100
             label=f"A Liquidar".replace(',', '.')
-            criaImagem(f"R${aLiquidar:,.0f}",f"{Delta:.2f}%",label,"fundoAzul.jpeg",b=20)
+            criaImagem(f"R${aLiquidar:,.0f}",label,"fundoAzul.jpeg",f"{Delta:.2f}%",b=20)
 
         col1, col2 = st.columns([2,2])
         with col1:
             #GRÁFICO PARA MOSTRAR LIQUIDADO POR DIA
+            # Calcula a liquidação acumulada
+            LiqPordia=DfEqpFiltro.groupby(['data_liquidacao'],as_index=False).agg({'valor_liquidado':'sum'})
+            LiqPordia['Liquidação Acumulada'] = LiqPordia['valor_liquidado'].cumsum()
 
             # with st.container(border=True):
             # Função para formatar números em formato curto
@@ -454,15 +442,13 @@ def run(user_info):
             fig.update_layout(title="Liquidação por dia X Meta Dia",height=350,margin=dict(l=60, r=20, t=80, b=60),plot_bgcolor="rgba(128,128,128,0.1)",paper_bgcolor="rgba(128,128,128,0.1)",showlegend=False)
 
             st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+
         with col2:
             
             #GRÁFICO PARA MOSTRAR LIQUIDADO POR EQUIPE
             LiqPorEquipe=DfEqpFiltro.query("@DfEqpFiltro['REPORTE']!='MARCOS'")
             LiqPorEquipe=LiqPorEquipe.groupby(['REPORTE'],as_index=False).agg({'valor_liquidado':'sum'}).sort_values(by='valor_liquidado',ascending=False)
-            # LiqPorEquipe=LiqPorEquipe.query("@LiqPorEquipe['REPORTE']!='MARCOS'")
-            # LiqPorEquipe=LiqPorEquipe.loc[LiqPorEquipe['REPORTE']!='MARCOS']
-            # LiqPorEquipe['Liquidação Acumulada']=LiqPorEquipe.groupby('colaborador')['valor_liquidado'].cumsum()
-            # with st.container(border=True):
+
             # Função para formatar números em formato curto
             
             def format_number_short(value):
@@ -539,18 +525,22 @@ def run(user_info):
             x = LiqPordiaGer['data_liquidacao']
             y = LiqPordiaGer['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
-            linha_meta = np.full(len(x), metaDia)
+            linha_meta = np.full(len(x), MetaLiq)
 
             x2 = LiqPordiaOn['data_liquidacao']
             y2 = LiqPordiaOn['Liquidação Acumulada']
             labels = [format_number_short(value) for value in y]
 
-
             # Criação dos traços do gráfico
-            data = [
-                go.Bar(x=x, y=y, name="Liquidado Equipe"),
-                go.Bar(name='Acordo Online', x=x2, y=y2)
-            ]
+            if optionsEqp!='Telecobrança':
+                data = [
+                    go.Bar(x=x, y=y, name="Liquidado Equipe"),
+                    go.Bar(name='Acordo Online', x=x2, y=y2),
+                ]
+            else:
+                data = [
+                    go.Bar(x=x, y=y, name="Liquidado Equipe"),
+                ]
             
             # Layout do gráfico
             layout = go.Layout(
@@ -569,19 +559,33 @@ def run(user_info):
             fig = go.Figure(data=data, layout=layout)
 
             try:
-                # Adicione anotações para os rótulos de dados
-                for i, txt in enumerate(y+y2):
-                    fig.add_annotation(
-                        x=x2[i],
-                        y=y[i]+y2[i],
-                        text=str(format_number_short(txt)), 
-                        showarrow=False,
-                        textangle=-70,
-                        xanchor='center',
-                        yanchor='top',
-                        yshift=35,
-                        font=dict(size=12, color="rgba(255,250,250, 0.5)")
-                    )
+                if optionsEqp!='Telecobrança':
+                    # Adicione anotações para os rótulos de dados
+                    for i, txt in enumerate(y+y2):
+                        fig.add_annotation(
+                            x=x2[i],
+                            y=y[i]+y2[i],
+                            text=str(format_number_short(txt)), 
+                            showarrow=False,
+                            textangle=-70,
+                            xanchor='center',
+                            yanchor='top',
+                            yshift=35,
+                            font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                        )
+                else:
+                    for i, txt in enumerate(y):
+                        fig.add_annotation(
+                            x=x2[i],
+                            y=y[i],
+                            text=str(format_number_short(txt)), 
+                            showarrow=False,
+                            textangle=-70,
+                            xanchor='center',
+                            yanchor='top',
+                            yshift=35,
+                            font=dict(size=12, color="rgba(255,250,250, 0.5)")
+                        )
             except:              
                 for i, txt in enumerate(y):
                     fig.add_annotation(
@@ -613,27 +617,58 @@ def run(user_info):
                 )
             )
 
-            st.plotly_chart(fig, use_container_width=True,meta=f"{metaDia}")
+            st.plotly_chart(fig, use_container_width=True,meta=f"{MetaLiq}")
 
         with col2:
-            labels = ['Liquidado','A_Liquidar']
-            values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliqEquipe['Valor_Original'].sum()]
+            labels = ['Liquidado', 'A_Liquidar', 'Falta_Meta']
+            values = [DfEqpFiltro['valor_liquidado'].sum(), BaseAliqEquipe['Valor_Original'].sum(), MetaLiq - DfEqpFiltro['valor_liquidado'].sum()]
 
-            # Use `hole` to create a donut-like pie chart
-            fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
+            color_discrete_map = {
+                'Liquidado': 'lightgreen',
+                'A_Liquidar': 'gold',
+                'Falta_Meta': 'red'
+            }
+
+            # Create a list of colors based on the mapping
+            colors = [color_discrete_map[label] for label in labels]
+
+            fig = go.Figure(data=[go.Pie(
+                labels=labels, 
+                values=values, 
+                hole=.3,
+                marker_colors=colors,
+                opacity=0.9,
+                marker=dict(
+                line=dict(color='white', width=2)
+            )  # Pass the list of colors here
+            )])
 
             st.plotly_chart(fig, use_container_width=True)
             
     with tab2:
+
+        col1, col2, col3, col4,col5,col6= st.columns([2,2,2,2,2,2])
+
+        with col1:
+            label="Dias de Trabalho"
+            criaImagem(dias_uteis,label,"fundoAzul.jpeg",f"Faltam {dias_uteis_falta} dias")
+
+        with col2:
+            label="Meta Liquidado"
+            M=f"R${float(Metaindividual):,.0f}".replace(',', '.')
+            # D=f"{percentual_falta:.2f}% {'' if percentual_falta<0 else 'Meta atingida'}"
+            criaImagem(M,label,"fundoAzul.jpeg",b=20)
+
         col1,col2,col3=st.columns([3,4,1])
         
         with col1:
-            liqColab=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online' and @BaseAliqEquipe['CARGO']=='ASSISTENTE' and @BaseAliqEquipe['SIT_ATUAL']!='INATIVO'").groupby(['colaborador'],as_index=False).agg({'valor_liquidado':'sum'})
+            liqColab=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online' and @DfEqpFiltro['SIT_ATUAL']!='INATIVO' and (@DfEqpFiltro['CARGO']=='ASSISTENTE' or @DfEqpFiltro['CARGO']=='ASSISTENTE_TELE')").groupby(['colaborador'],as_index=False).agg({'valor_liquidado':'sum'})
 
-            receberColab=BaseAliqEquipe.query("@BaseAliqEquipe['Criado_Por']!='Acordo Online' and @BaseAliqEquipe['CARGO']=='ASSISTENTE'").groupby(['Criado_Por'],as_index=False).agg({'Valor_Original':'sum'})
+            receberColab=BaseAliqEquipe.query("@BaseAliqEquipe['Criado_Por']!='Acordo Online' and @BaseAliqEquipe['Parcela']!=1 and @BaseAliqEquipe['SIT_ATUAL']!='INATIVO' and (@BaseAliqEquipe['CARGO']=='ASSISTENTE' or @BaseAliqEquipe['CARGO']=='ASSISTENTE_TELE')").groupby(['Criado_Por'],as_index=False).agg({'Valor_Original':'sum'})
 
             liqEquipeMerge=liqColab.merge(receberColab,left_on='colaborador',right_on='Criado_Por',how='left').sort_values(by='valor_liquidado',ascending=True)
-            st.dataframe(liqEquipeMerge)
+            # st.dataframe(liqEquipeMerge)
+
             linha_meta = np.full(len(x), Metaindividual)
             # Carrega a imagem
             fig = go.Figure()
@@ -685,113 +720,121 @@ def run(user_info):
 
             st.plotly_chart(fig, use_container_width=True)
         with col2:
+            
+            tabelaLiq=DfEqpFiltro.query("@DfEqpFiltro['colaborador']!='Acordo Online' and @DfEqpFiltro['SIT_ATUAL']!='INATIVO' and (@DfEqpFiltro['CARGO']=='ASSISTENTE' or @DfEqpFiltro['CARGO']=='ASSISTENTE_TELE')").groupby('colaborador',as_index=False)['valor_liquidado'].sum()
 
-            cobranca_geral=DfEqpFiltro.merge(BaseAliqEquipe,left_on='colaborador',right_on='Criado_Por',how='left')
+            tabelaAliq=BaseAliqEquipe.query("@BaseAliqEquipe['Criado_Por']!='Acordo Online' and @BaseAliqEquipe['Parcela']!=1 and @BaseAliqEquipe['SIT_ATUAL']!='INATIVO' and (@BaseAliqEquipe['CARGO']=='ASSISTENTE' or @BaseAliqEquipe['CARGO']=='ASSISTENTE_TELE')").groupby('Criado_Por',as_index=False)['Valor_Original'].sum()
 
-            metaDiaria=metaDia
-            diasPassados=(dias_uteis-dias_uteis_falta)
+            cobranca_geral=tabelaLiq.merge(tabelaAliq,left_on='colaborador',right_on='Criado_Por',how='left').drop(columns='Criado_Por')
+            
+            cobranca_geral['RANK'] = cobranca_geral['valor_liquidado'].rank(method='dense', ascending=False).astype(int)
 
-            cobranca_geral['valorPcolab']=cobranca_geral.groupby('colaborador')['valor_liquidado'].transform(sum)
+            cobranca_geral=cobranca_geral[['RANK','colaborador','valor_liquidado','Valor_Original']]
+            # metaDiaria=metaDia
+            # diasPassados=(dias_uteis-dias_uteis_falta)
 
-            cobranca_geral['RANK'] = cobranca_geral['valorPcolab'].rank(method='dense', ascending=False).astype(int)
-            # st.dataframe(cobranca_geral)
+            # cobranca_geral['valorPcolab']=cobranca_geral.groupby('colaborador')['valor_liquidado'].transform(sum)
 
-            # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
-            # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
-            mes=dt.datetime.now().month
-            if len(cobranca_geral[cobranca_geral['Valor_Original'].isna()])==len(cobranca_geral) or mesNum < mes:
-                cobranca_geral['Valor_Original']=0
-            try:
-                agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','colaborador','Valor_Original'], values='valor_liquidado', aggfunc='sum').reset_index().sort_values(by='valor_liquidado',ascending=False)
+            # cobranca_geral['RANK'] = cobranca_geral['valorPcolab'].rank(method='dense', ascending=False).astype(int)
+            # # st.dataframe(cobranca_geral)
 
-            except:
+            # # agroupTab=cobranca_geral.groupby('REPORTE')[['Nome_Colaborador','Valor Liquidado']].agg({'Nome_Colaborador':'first','Valor Liquidado':'sum'})
+            # # cobranca_geral['RANK']=range(1,len(cobranca_geral['Nome_Colaborador'])+1)
+            # mes=dt.datetime.now().month
+            # if len(cobranca_geral[cobranca_geral['Valor_Original'].isna()])==len(cobranca_geral) or mesNum < mes:
+            #     cobranca_geral['Valor_Original']=0
+            # try:
+            #     agroupTab = cobranca_geral.pivot_table(index=['RANK','REPORTE','colaborador','Valor_Original'], values='valor_liquidado', aggfunc='sum').reset_index().sort_values(by='valor_liquidado',ascending=False)
+
+            # except:
                 
-                agroupTab=cobranca_geral[['RANK','REPORTE','colaborador','valor_liquidado','Valor_Original']]
-                print(agroupTab['Valor_Original'], 'Baixo')
+            #     agroupTab=cobranca_geral[['RANK','REPORTE','colaborador','valor_liquidado','Valor_Original']]
+            #     print(agroupTab['Valor_Original'], 'Baixo')
 
-            agroupTab['% Atingido Meta']=agroupTab['valor_liquidado'].apply(lambda x:f"{x/Metaindividual*100:.2f}%")
+            # agroupTab['% Atingido Meta']=agroupTab['valor_liquidado'].apply(lambda x:f"{x/Metaindividual*100:.2f}%")
 
-            # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
+            # # agroupTab['RANK']=range(1,len(agroupTab['Nome_Colaborador'])+1)
 
-            agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
+            # agroupTab['Meta Diária']=f"R${metaDiaria:,.2f}".replace(",",";").replace(".",",").replace(";",".")
 
-            if diasPassados ==0:
-                diasPassados=1
+            # if diasPassados ==0:
+            #     diasPassados=1
 
-            dados_dias_anteriores = liqEquipeMerge[liqEquipeMerge['data_liquidacao'].dt.day < diaHj]
+            # dados_dias_anteriores = liqEquipeMerge[liqEquipeMerge['data_liquidacao'].dt.day < diaHj]
 
-            media_por_colaborador_dia = dados_dias_anteriores.groupby('colaborador',as_index=False)['valor_liquidado'].mean()
+            # media_por_colaborador_dia = dados_dias_anteriores.groupby('colaborador',as_index=False)['valor_liquidado'].mean()
     
-            agroupTab['Realizado por Dia (Média)'] = (agroupTab['valor_liquidado']-media_por_colaborador_dia['valor_liquidado'])/(diasPassados-1)
+            # agroupTab['Realizado por Dia (Média)'] = (agroupTab['valor_liquidado']-media_por_colaborador_dia['valor_liquidado'])/(diasPassados-1)
 
-            agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))  
+            # agroupTab['Déficit/Superávit Diário']=agroupTab['Realizado por Dia (Média)'].apply(lambda x:f"R${(x-metaDiaria):,.2f}".replace(",",";").replace(".",",").replace(";","."))  
 
-            agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['Realizado por Dia (Média)']=agroupTab['Realizado por Dia (Média)'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
 
-            agroupTab['Realizado Total']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['Realizado Total']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
 
-            agroupTab['Falta']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x-Metaindividual:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['Falta']=agroupTab['valor_liquidado'].apply(lambda x: f"R${x-Metaindividual:,.2f}".replace(",",";").replace(".",",").replace(";","."))
 
-            agroupTab['% Falta']=agroupTab['valor_liquidado'].apply(lambda x:f"{(x/Metaindividual*100)-100:.2f}%")
+            # agroupTab['% Falta']=agroupTab['valor_liquidado'].apply(lambda x:f"{(x/Metaindividual*100)-100:.2f}%")
             
-            agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # agroupTab['Déficit/Superávit Total']=agroupTab['Déficit/Superávit Diário'].apply(lambda x: f"R${float(x.replace('R$','').replace('.','').replace(',','.'))*(diasPassados-1):,.2f}".replace(",",";").replace(".",",").replace(";","."))
 
-            agroupTab['Receber']=agroupTab['Valor_Original'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
-            # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
-            # Função para verificar se a meta foi batida
-            def verificar_meta(row):
-                if row['valor_liquidado'] >= Metaindividual:
-                    return 'Meta Batida'
-                elif (row['valor_liquidado']+ row['Valor_Original']) >= Metaindividual:
-                    return 'Pode Bater Meta'
-                elif (row['valor_liquidado']+ row['Valor_Original']+(dias_uteis_falta*metaDiaria)) >= Metaindividual:
-                    return 'Chance de bater a meta'
-                else:
-                    return 'Não irá bater Meta'
+            # agroupTab['Receber']=agroupTab['Valor_Original'].apply(lambda x: f"R${x:,.2f}".replace(",",";").replace(".",",").replace(";","."))
+            # # agroupTab['PREVISÃO_META']=agroupTab['Realizado Total']+agroupTab['A Receber']
+            # # Função para verificar se a meta foi batida
+            # def verificar_meta(row):
+            #     if row['valor_liquidado'] >= Metaindividual:
+            #         return 'Meta Batida'
+            #     elif (row['valor_liquidado']+ row['Valor_Original']) >= Metaindividual:
+            #         return 'Pode Bater Meta'
+            #     elif (row['valor_liquidado']+ row['Valor_Original']+(dias_uteis_falta*metaDiaria)) >= Metaindividual:
+            #         return 'Chance de bater a meta'
+            #     else:
+            #         return 'Não irá bater Meta'
                 
-            agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
+            # agroupTab['Resultado']=agroupTab.apply(verificar_meta, axis=1)
 
 
-            agroupTab=agroupTab[['RANK','REPORTE','colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
+            # agroupTab=agroupTab[['RANK','REPORTE','colaborador','Realizado Total','% Atingido Meta','Falta','% Falta','Meta Diária','Realizado por Dia (Média)','Déficit/Superávit Diário','Déficit/Superávit Total','Receber','Resultado']]
             
-            # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
-            def color_text(value):
-                if value == 'Meta Batida':
-                    color = 'blue'
-                elif value == 'Pode Bater Meta':
-                    color = 'lightblue'
-                elif value == 'Chance de bater a meta':
-                    color = 'orange'
-                elif value == 'Não irá bater Meta':
-                    color = 'red'
-                else:
-                    color = 'black'  # Cor padrão para outros valores
-                return f'color: {color};'
+            # # Função para definir a cor do texto com base no conteúdo da coluna 'Resultado'
+            # def color_text(value):
+            #     if value == 'Meta Batida':
+            #         color = 'blue'
+            #     elif value == 'Pode Bater Meta':
+            #         color = 'lightblue'
+            #     elif value == 'Chance de bater a meta':
+            #         color = 'orange'
+            #     elif value == 'Não irá bater Meta':
+            #         color = 'red'
+            #     else:
+            #         color = 'black'  # Cor padrão para outros valores
+            #     return f'color: {color};'
 
-            # agroupTab.set_index('RANK', inplace=True)
-            # Aplicando a formatação condicional à coluna 'Resultado'
-            styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
+            # # agroupTab.set_index('RANK', inplace=True)
+            # # Aplicando a formatação condicional à coluna 'Resultado'
+            # styled_df = agroupTab.style.applymap(lambda x: color_text(x), subset=['Resultado'])
 
-            # Converte o DataFrame para HTML
-            # Converte o DataFrame para HTML, removendo o índice
+            # # Converte o DataFrame para HTML
+            # # Converte o DataFrame para HTML, removendo o índice
             
-            # html_table = styled_df.to_html()
-            # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
+            # # html_table = styled_df.to_html()
+            # # html_table = html_table.replace('<table ', '<table class="table table-dark table-hover" ')
 
-            # components.html(
-            #     f"""
-            #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-            #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-            #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+            # # components.html(
+            # #     f"""
+            # #     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+            # #     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+            # #     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
 
-            #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
-            #     """,
-            #     height=800,
-            # )
-            # st.components.v1.html(html_table, height=500, scrolling=True)
-            # st.markdown(html_table, unsafe_allow_html=True)
-            # st.markdown(html_table_bot, unsafe_allow_html=True)
-            st.dataframe(styled_df, hide_index=True, height=800, width=1100,use_container_width=True)
+            # #     <iframe srcdoc="{html.escape(html_table)}" scrolling="auto" frameborder="0" style="width: 100%; height: 800px;"></iframe>
+            # #     """,
+            # #     height=800,
+            # # )
+            # # st.components.v1.html(html_table, height=500, scrolling=True)
+            # # st.markdown(html_table, unsafe_allow_html=True)
+            # # st.markdown(html_table_bot, unsafe_allow_html=True)
+            st.dataframe(cobranca_geral, hide_index=True, height=800, width=1100,use_container_width=True)
+
     if user_info[2]=="ADMIN":
         with tab3:
             def inserir_dados(Ru, nome,email, cargo,avancado, equipe,matricula=None,img_byte_arr=None):

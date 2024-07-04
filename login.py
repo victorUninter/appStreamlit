@@ -21,7 +21,7 @@ def main():
         # Executa o dashboard passando as informações do usuário
         metas.run(st.session_state.user_info)  
     else:
-        col1,col2,col3 = st.columns([5,2,5])
+        col1,col2,col3 = st.columns([5,3,5])
         with col2:
             # Formulário de login
             st.title("Login")
